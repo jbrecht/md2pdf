@@ -1,0 +1,75 @@
+/* Print adjustments layered on top of github-markdown-css. */
+
+@page {
+  margin: 0.75in 0.7in;
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}
+
+.markdown-body {
+  box-sizing: border-box;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  font-size: 11pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* Wrap long code lines instead of clipping them at the page edge. */
+.markdown-body pre,
+.markdown-body pre code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: visible;
+}
+
+/* Keep headings with the content that follows them. */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  break-after: avoid;
+}
+
+.markdown-body pre,
+.markdown-body blockquote,
+.markdown-body tr,
+.markdown-body img {
+  break-inside: avoid;
+}
+
+.markdown-body img {
+  max-width: 100%;
+}
+
+/* Header anchor links are only useful on screen. */
+.markdown-body a.header-anchor {
+  display: none;
+}
+
+/* Task list checkboxes: drop the bullet, like GitHub. */
+.markdown-body .task-list-item {
+  list-style-type: none;
+}
+.markdown-body .task-list-item input {
+  margin: 0 0.35em 0.25em -1.4em;
+  vertical-align: middle;
+}
+
+/* highlight.js's theme adds its own padding and background; GitHub's <pre> already has them. */
+.markdown-body pre code.hljs {
+  padding: 0;
+  background: transparent;
+}
+
+/* GitHub's footnotes section has its own top border; drop the plugin's extra <hr>. */
+.markdown-body hr.footnotes-sep {
+  display: none;
+}
