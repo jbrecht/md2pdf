@@ -78,7 +78,7 @@ Styles are registered in the `STYLES` map in `bin/md2pdf.js`; each is a list of 
 
 # Website (md2pdf.me)
 
-A static site in `site/`: the converter on `/`, a Markdown guide on `/guide/` and a privacy policy on `/privacy/`. Conversion happens entirely in the visitor's browser: the preview is a sandboxed iframe styled with the same CSS as the CLI, and *Download PDF* prints it with the browser's own PDF engine. Empty `@page` margin boxes in each style keep browsers from adding their own date/URL headers.
+A static site in `site/`: the converter on `/`, an AI-answer landing page on `/chatgpt-to-pdf/` (same converter, different sample and copy), a Markdown guide on `/guide/` and a privacy policy on `/privacy/`. The converter markup is shared via `src/partials/tool.html`; each page picks its sample with `<body data-sample>`. Math (`\( \)`, `\[ \]`, `$ $`, `$$ $$`) is rendered with KaTeX, which is only downloaded when a document contains formulas. Conversion happens entirely in the visitor's browser: the preview is a sandboxed iframe styled with the same CSS as the CLI, and *Download PDF* prints it with the browser's own PDF engine. Empty `@page` margin boxes in each style keep browsers from adding their own date/URL headers.
 
 ```sh
 npm install              # installs the CLI and site workspaces
@@ -86,7 +86,7 @@ npm run dev -w site      # http://localhost:5173
 npm run build -w site    # → site/dist
 ```
 
-Deployed on Vercel (see `vercel.json`).
+Deployed on Vercel (see `vercel.json`); pushes to `main` deploy to production. Production builds include Vercel Web Analytics (cookieless), which must be enabled in the Vercel project's Analytics tab.
 
 ## Ads
 
