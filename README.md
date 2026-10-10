@@ -86,6 +86,8 @@ npm run dev -w site      # http://localhost:5173
 npm run build -w site    # → site/dist
 ```
 
+The site is also an installable web app (Chrome/Edge): `public/manifest.webmanifest` registers it as a handler for `.md` files (*Open With → md2pdf*), `src/pwa.js` shows the *Install app* button, and a service worker (built from `src/sw.js` with the build's file list) makes it work offline. Inside the app window the marketing sections are hidden.
+
 Deployed on Vercel (see `vercel.json`); pushes to `main` deploy to production. Production builds include Vercel Web Analytics (cookieless), which must be enabled in the Vercel project's Analytics tab.
 
 ## Ads
