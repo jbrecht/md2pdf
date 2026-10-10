@@ -16,10 +16,18 @@ This installs:
 
 - `~/.local/bin/md2pdf` — the command-line tool
 - **Convert to PDF** Quick Action — right-click any `.md` file in Finder → **Quick Actions → Convert to PDF**
+- **⌃⌥⌘P** keyboard shortcut — select `.md` files in Finder and press it
 
-Re-run `install.sh` if you move this folder or remove the Node version it was installed with. `./uninstall.sh` removes both.
+Re-run `install.sh` if you move this folder or remove the Node version it was installed with. `./uninstall.sh` removes all of it.
 
-> Tip: assign a keyboard shortcut in **System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders → Convert to PDF**.
+To use a different shortcut, pass it when installing (`@` ⌘, `~` ⌥, `^` ⌃, `$` ⇧), or set it to empty to skip:
+
+```sh
+MD2PDF_SHORTCUT='@$p' ./install.sh   # ⇧⌘P
+MD2PDF_SHORTCUT= ./install.sh        # no shortcut
+```
+
+You can also change it later in **System Settings → Keyboard → Keyboard Shortcuts → Services → Files and Folders → Convert to PDF**.
 
 ## Usage
 

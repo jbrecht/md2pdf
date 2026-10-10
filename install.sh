@@ -3,6 +3,7 @@
 #   1. npm dependencies
 #   2. ~/.local/bin/md2pdf command-line launcher
 #   3. "Convert to PDF" Finder Quick Action (right-click a .md file → Quick Actions)
+#   4. ⌃⌥⌘P keyboard shortcut for the Quick Action
 # Safe to re-run, e.g. after moving this folder or changing Node versions.
 
 set -euo pipefail
@@ -38,6 +39,23 @@ cp -R "$ROOT/quick-action/Convert to PDF.workflow" "$WORKFLOW"
 script_path=${ROOT//&/&amp;}/quick-action/convert.sh
 /usr/bin/sed -i '' "s|__CONVERT_SCRIPT__|${script_path//|/\\|}|" "$WORKFLOW/Contents/document.wflow"
 /System/Library/CoreServices/pbs -update 2>/dev/null || true
+
+# Keyboard shortcut, stored in the Services preferences (System Settings → Keyboard →
+# Keyboard Shortcuts → Services). Modifiers: @ = ⌘, ~ = ⌥, ^ = ⌃, $ = ⇧.
+# Override with MD2PDF_SHORTCUT='@$p' ./install.sh, or MD2PDF_SHORTCUT= to skip.
+SHORTCUT=${MD2PDF_SHORTCUT-'@~^p'}
+if [[ -n "$SHORTCUT" ]]; then
+  echo "→ Setting keyboard shortcut $SHORTCUT"
+  prefs=$(mktemp -t md2pdf-pbs)
+  defaults export pbs "$prefs"
+  plutil -extract NSServicesStatus raw "$prefs" >/dev/null 2>&1 || plutil -insert NSServicesStatus -dictionary "$prefs"
+  plutil -replace "NSServicesStatus.(null) - Convert to PDF - runWorkflowAsService" -json \
+    "{\"key_equivalent\":\"$SHORTCUT\",\"presentation_modes\":{\"ContextMenu\":true,\"FinderPreview\":true,\"ServicesMenu\":true,\"TouchBar\":false}}" \
+    "$prefs"
+  defaults import pbs "$prefs"
+  rm -f "$prefs"
+  /System/Library/CoreServices/pbs -update 2>/dev/null || true
+fi
 
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   echo
