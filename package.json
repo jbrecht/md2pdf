@@ -1,16 +1,32 @@
 {
   "name": "md2pdf",
   "version": "1.0.0",
-  "description": "Convert Markdown to PDF with GitHub styling",
-  "scripts": {
-    "test": "node test/run.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "description": "Markdown to beautifully styled PDF: the renderer and macOS CLI behind md2pdf.me",
   "type": "module",
+  "license": "MIT",
+  "author": "Threepenny Labs LLC",
+  "homepage": "https://md2pdf.me",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jbrecht/md2pdf.git"
+  },
+  "private": true,
   "bin": {
     "md2pdf": "bin/md2pdf.js"
+  },
+  "exports": {
+    ".": "./lib/render.js",
+    "./render": "./lib/render.js",
+    "./styles/*": "./styles/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "styles"
+  ],
+  "scripts": {
+    "test": "node test/run.js"
   },
   "dependencies": {
     "github-markdown-css": "^5.9.0",
@@ -20,14 +36,5 @@
     "markdown-it-emoji": "^3.1.0",
     "markdown-it-footnote": "^4.0.0",
     "markdown-it-task-lists": "^2.1.1"
-  },
-  "private": true,
-  "files": [
-    "bin",
-    "lib",
-    "styles"
-  ],
-  "workspaces": [
-    "site"
-  ]
+  }
 }
