@@ -20,5 +20,14 @@
     "markdown-it-emoji": "^3.1.0",
     "markdown-it-footnote": "^4.0.0",
     "markdown-it-task-lists": "^2.1.1"
-  }
+  },
+  "private": true,
+  "files": [
+    "bin",
+    "lib",
+    "styles"
+  ],
+  "workspaces": [
+    "site"
+  ]
 }

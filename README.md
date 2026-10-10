@@ -1,8 +1,20 @@
 # md2pdf
 
-Convert Markdown files to GitHub-styled PDFs on macOS — from the terminal or by right-clicking in Finder.
+Convert Markdown files to beautifully styled PDFs — online at **[md2pdf.me](https://md2pdf.me)**, or on macOS from the terminal or a Finder right-click.
 
-Markdown is rendered to HTML with [markdown-it](https://github.com/markdown-it/markdown-it) and printed to PDF by your installed Google Chrome running headless. Supports tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, and images referenced relative to the Markdown file.
+Markdown is rendered to HTML with [markdown-it](https://github.com/markdown-it/markdown-it) and printed to PDF by Chrome (or, on the website, by the visitor's own browser). Supports tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, and page breaks (`<div class="page-break"></div>`).
+
+## Repository layout
+
+| Path | What it is |
+| ---- | ---------- |
+| `lib/render.js` | Markdown → HTML rendering shared by the CLI and the website |
+| `styles/` | Document styles (`github`, `classic`) shared by both |
+| `bin/md2pdf.js` | The command-line tool |
+| `quick-action/`, `install.sh`, `set-style.sh` | macOS integration |
+| `site/` | The md2pdf.me website (Vite, static, deployed on Vercel) |
+
+# Mac command-line tool
 
 ## Install
 
@@ -64,10 +76,35 @@ The choice is saved in `~/.config/md2pdf/config.json`. Use `md2pdf -s <style>` t
 
 Styles are registered in the `STYLES` map in `bin/md2pdf.js`; each is a list of CSS files inlined into the page in order. Create `styles/<name>.css` (the content is wrapped in `<article class="markdown-body">`), register it in `STYLES`, and it's available to `-s` and `set-style.sh`. Use `md2pdf --html` to get the intermediate HTML for tweaking in a browser. For one-off tweaks, `--css` is enough.
 
+# Website (md2pdf.me)
+
+A static site in `site/`: the converter on `/`, a Markdown guide on `/guide/` and a privacy policy on `/privacy/`. Conversion happens entirely in the visitor's browser: the preview is a sandboxed iframe styled with the same CSS as the CLI, and *Download PDF* prints it with the browser's own PDF engine. Empty `@page` margin boxes in each style keep browsers from adding their own date/URL headers.
+
+```sh
+npm install              # installs the CLI and site workspaces
+npm run dev -w site      # http://localhost:5173
+npm run build -w site    # → site/dist
+```
+
+Deployed on Vercel (see `vercel.json`).
+
+## Ads
+
+Ads are off until you configure Google AdSense through environment variables (in Vercel's project settings, or `site/.env.local` for local builds):
+
+| Variable | Value |
+| -------- | ----- |
+| `VITE_ADSENSE_CLIENT` | Your publisher ID, `ca-pub-…`. Adds the AdSense script and verification tag to every page and generates `/ads.txt`. That's enough for AdSense to review the site and for Auto ads. |
+| `VITE_ADSENSE_SLOT_TOOL` | Ad unit below the converter |
+| `VITE_ADSENSE_SLOT_CONTENT` | Ad unit in the converter page's content |
+| `VITE_ADSENSE_SLOT_GUIDE` | Ad unit at the end of the guide |
+
+Slots without an ID are removed from the page; in `npm run dev` they show as dashed placeholders. For visitors in the EEA, UK and Switzerland, set up Google's consent message under **Privacy & messaging** in AdSense; no code changes are needed.
+
 ## Development
 
 ```sh
-npm test    # end-to-end tests against test/fixtures
+npm test    # CLI end-to-end tests against test/fixtures
 ```
 
 Set `CHROME_PATH` to use a specific browser binary.

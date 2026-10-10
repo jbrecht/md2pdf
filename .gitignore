@@ -1,3 +1,7 @@
 node_modules/
 *.pdf
 .DS_Store
+site/dist/
+.vercel/
+.env*.local
+.vercel

@@ -2,6 +2,14 @@
 
 @page {
   margin: 0.75in 0.7in;
+  /* Empty margin boxes stop browsers from adding their own date/URL headers and footers
+     when printing from the website. */
+  @top-center {
+    content: "";
+  }
+  @bottom-center {
+    content: "";
+  }
 }
 
 html,
@@ -72,4 +80,9 @@ body {
 /* GitHub's footnotes section has its own top border; drop the plugin's extra <hr>. */
 .markdown-body hr.footnotes-sep {
   display: none;
+}
+
+/* <div class="page-break"></div> starts a new page. */
+.markdown-body .page-break {
+  break-after: page;
 }

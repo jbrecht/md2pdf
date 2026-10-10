@@ -9,12 +9,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createRequire } from 'node:module';
 
-import MarkdownIt from 'markdown-it';
-import anchor from 'markdown-it-anchor';
-import footnote from 'markdown-it-footnote';
-import taskLists from 'markdown-it-task-lists';
-import { full as emoji } from 'markdown-it-emoji';
 import hljs from 'highlight.js';
+import { buildDocument, createRenderer, titleOf } from '../lib/render.js';
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -92,53 +88,18 @@ function findChrome() {
   return found;
 }
 
-const escapeHtml = (s) =>
-  s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-
-function createRenderer() {
-  const md = new MarkdownIt({
-    html: true,
-    linkify: true,
-    typographer: true,
-    highlight(code, lang) {
-      code = code.replace(/\n$/, '');
-      const body =
-        lang && hljs.getLanguage(lang)
-          ? hljs.highlight(code, { language: lang, ignoreIllegals: true }).value
-          : escapeHtml(code);
-      return `<pre><code class="hljs${lang ? ` language-${escapeHtml(lang)}` : ''}">${body}</code></pre>`;
-    },
-  });
-  md.use(anchor, { slugify: (s) => s.trim().toLowerCase().replace(/[^\w\- ]+/g, '').replace(/\s/g, '-') })
-    .use(footnote)
-    .use(taskLists, { label: true })
-    .use(emoji);
-  return md;
-}
-
 function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
   const css = [...STYLES[style], ...(extraCss ? [extraCss] : [])]
     .map((f) => readFileSync(f, 'utf8'))
     .join('\n');
-  const body = createRenderer().render(markdown);
-  // <base> makes relative image/link paths resolve against the Markdown file's folder.
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>${escapeHtml(title)}</title>
-<base href="${pathToFileURL(baseDir + '/').href}">
-<style>
-${css}
-@page { size: ${pageSize}; }
-</style>
-</head>
-<body>
-<article class="markdown-body">
-${body}
-</article>
-</body>
-</html>`;
+  return buildDocument({
+    bodyHtml: createRenderer({ hljs }).render(markdown),
+    title,
+    css,
+    pageSize,
+    // <base> makes relative image/link paths resolve against the Markdown file's folder.
+    head: `<base href="${pathToFileURL(baseDir + '/').href}">`,
+  });
 }
 
 function runChrome(chrome, htmlPath, pdfPath) {
@@ -175,7 +136,7 @@ async function convert(input, opts, chrome) {
   const markdown = readFileSync(inputPath, 'utf8');
   const stem = basename(inputPath, extname(inputPath));
   const pdfPath = resolve(opts.output ?? join(dirname(inputPath), `${stem}.pdf`));
-  const title = markdown.match(/^#\s+(.+)$/m)?.[1].trim() ?? stem;
+  const title = titleOf(markdown, stem);
 
   const html = buildHtml({
     markdown,

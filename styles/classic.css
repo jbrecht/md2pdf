@@ -12,6 +12,10 @@
 
 @page {
   margin: 1in 1.1in 0.9in;
+  /* An empty top box stops browsers from adding their own date/title header. */
+  @top-center {
+    content: "";
+  }
   @bottom-center {
     content: counter(page);
     font-family: "Iowan Old Style", Charter, Palatino, Georgia, serif;
@@ -21,7 +25,7 @@
 }
 @page :first {
   @bottom-center {
-    content: none;
+    content: "";
   }
 }
 
@@ -307,4 +311,9 @@ body {
 .markdown-body .footnote-ref a,
 .markdown-body .footnote-backref {
   color: var(--accent);
+}
+
+/* <div class="page-break"></div> starts a new page. */
+.markdown-body .page-break {
+  break-after: page;
 }
