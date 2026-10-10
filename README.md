@@ -94,7 +94,7 @@ Ads are off until you configure Google AdSense through environment variables (in
 
 | Variable | Value |
 | -------- | ----- |
-| `VITE_ADSENSE_CLIENT` | Your publisher ID, `ca-pub-…`. Adds the AdSense script and verification tag to every page and generates `/ads.txt`. That's enough for AdSense to review the site and for Auto ads. |
+| `VITE_ADSENSE_CLIENT` | Your publisher ID, `pub-…` (as AdSense shows it) or `ca-pub-…`. Adds the AdSense script and verification tag to every page and generates `/ads.txt`. That's enough for AdSense to review the site and for Auto ads. |
 | `VITE_ADSENSE_SLOT_TOOL` | Ad unit below the converter |
 | `VITE_ADSENSE_SLOT_CONTENT` | Ad unit in the converter page's content |
 | `VITE_ADSENSE_SLOT_GUIDE` | Ad unit at the end of the guide |
