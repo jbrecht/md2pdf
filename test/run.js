@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'bin', 'md2pdf.js');
 const FIXTURES = join(ROOT, 'test', 'fixtures');
+
+// Point every run at a throwaway config so tests never touch the real default style.
+const CONFIG = join(mkdtempSync(join(tmpdir(), 'md2pdf-config-')), 'config.json');
+process.env.MD2PDF_CONFIG = CONFIG;
 
 const run = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
 const pageCount = (pdf) => readFileSync(pdf, 'latin1').match(/\/Type\s*\/Page[^s]/g)?.length ?? 0;
@@ -85,4 +89,45 @@ test('rejects an unknown style', () => {
   const r = run('-s', 'bogus', join(FIXTURES, 'sample.md'));
   assert.equal(r.status, 2);
   assert.match(r.stderr, /unknown style "bogus"/);
+});
+
+test('classic style renders with its own stylesheet', () => {
+  const dir = workspace();
+  const r = run('-s', 'classic', '--html', join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  const html = readFileSync(join(dir, 'sample.html'), 'utf8');
+  assert.match(html, /Iowan Old Style/);
+  assert.doesNotMatch(html, /color-scheme: light/);
+  assert.ok(existsSync(join(dir, 'sample.pdf')));
+});
+
+test('--list-styles marks github as the default when no config exists', () => {
+  rmSync(CONFIG, { force: true });
+  const r = run('--list-styles');
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /^\* github$/m);
+  assert.match(r.stdout, /^  classic$/m);
+});
+
+test('--set-style changes the default used for conversions', () => {
+  rmSync(CONFIG, { force: true });
+  assert.equal(run('--set-style', 'classic').status, 0);
+  assert.deepEqual(JSON.parse(readFileSync(CONFIG, 'utf8')), { style: 'classic' });
+  assert.match(run('--list-styles').stdout, /^\* classic$/m);
+
+  const dir = workspace();
+  run('--html', join(dir, 'sample.md'));
+  assert.match(readFileSync(join(dir, 'sample.html'), 'utf8'), /Iowan Old Style/);
+
+  // An explicit -s still wins over the default.
+  run('--html', '-s', 'github', join(dir, 'sample.md'));
+  assert.doesNotMatch(readFileSync(join(dir, 'sample.html'), 'utf8'), /Iowan Old Style/);
+  rmSync(CONFIG, { force: true });
+});
+
+test('--set-style rejects an unknown style and leaves the config alone', () => {
+  rmSync(CONFIG, { force: true });
+  const r = run('--set-style', 'bogus');
+  assert.equal(r.status, 2);
+  assert.ok(!existsSync(CONFIG));
 });

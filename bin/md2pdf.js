@@ -2,8 +2,8 @@
 // md2pdf: convert Markdown files to PDF using headless Chrome.
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -20,14 +20,21 @@ const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // Each style is a list of CSS files inlined into the page, in order.
-// To add a style, drop a CSS file in styles/ and register it here.
+// To add a style, drop a CSS file in styles/ and register it here; set-style.sh picks it up.
 const STYLES = {
   github: [
     require.resolve('github-markdown-css/github-markdown-light.css'),
     require.resolve('highlight.js/styles/github.css'),
     join(ROOT, 'styles', 'github.css'),
   ],
+  classic: [join(ROOT, 'styles', 'classic.css')],
 };
+const FALLBACK_STYLE = 'github';
+
+// Settings shared by the CLI, Finder Quick Action and keyboard shortcut.
+const CONFIG_PATH =
+  process.env.MD2PDF_CONFIG ??
+  join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'md2pdf', 'config.json');
 
 const CHROME_CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -37,21 +44,46 @@ const CHROME_CANDIDATES = [
   '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
 ];
 
-const USAGE = `Usage: md2pdf [options] <file.md>...
+const usage = (defaultStyle) => `Usage: md2pdf [options] <file.md>...
+       md2pdf --set-style <name>
+       md2pdf --list-styles
 
 Converts each Markdown file to a PDF saved next to it.
 
 Options:
   -o, --output <file>    Output path (only with a single input file)
-  -s, --style <name>     Style to use (${Object.keys(STYLES).join(', ')}; default: github)
+  -s, --style <name>     Style to use (${Object.keys(STYLES).join(', ')}; default: ${defaultStyle})
       --css <file>       Extra CSS file applied after the style
   -p, --page-size <size> Letter, A4, Legal, ... (default: Letter)
       --open             Open the PDF when done
       --html             Also write the intermediate .html (for debugging styles)
+      --set-style <name> Make <name> the default style (also used by the Finder Quick Action)
+      --list-styles      List styles, marking the default
   -h, --help             Show this help
 
 Environment:
-  CHROME_PATH            Path to a Chrome/Chromium binary to use`;
+  CHROME_PATH            Path to a Chrome/Chromium binary to use
+  MD2PDF_CONFIG          Config file (default: ${CONFIG_PATH})`;
+
+function readConfig() {
+  if (!existsSync(CONFIG_PATH)) return {};
+  try {
+    return JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+  } catch (err) {
+    console.error(`md2pdf: ignoring unreadable config ${CONFIG_PATH}: ${err.message}`);
+    return {};
+  }
+}
+
+function writeConfig(config) {
+  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
+}
+
+function unknownStyle(name) {
+  console.error(`md2pdf: unknown style "${name}". Available: ${Object.keys(STYLES).join(', ')}`);
+  process.exit(2);
+}
 
 function findChrome() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
@@ -173,28 +205,43 @@ async function main() {
       allowPositionals: true,
       options: {
         output: { type: 'string', short: 'o' },
-        style: { type: 'string', short: 's', default: 'github' },
+        style: { type: 'string', short: 's' },
         css: { type: 'string' },
         'page-size': { type: 'string', short: 'p', default: 'Letter' },
         open: { type: 'boolean' },
         html: { type: 'boolean' },
+        'set-style': { type: 'string' },
+        'list-styles': { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },
     });
   } catch (err) {
-    console.error(`md2pdf: ${err.message}\n\n${USAGE}`);
+    console.error(`md2pdf: ${err.message}\n\nRun md2pdf --help for usage.`);
     process.exit(2);
   }
   const { values: opts, positionals: files } = parsed;
+  const config = readConfig();
+  const defaultStyle = STYLES[config.style] ? config.style : FALLBACK_STYLE;
 
+  if (opts['set-style'] !== undefined) {
+    if (!STYLES[opts['set-style']]) unknownStyle(opts['set-style']);
+    writeConfig({ ...config, style: opts['set-style'] });
+    console.log(`Default style is now "${opts['set-style']}".`);
+    process.exit(0);
+  }
+  if (opts['list-styles']) {
+    for (const name of Object.keys(STYLES)) console.log(`${name === defaultStyle ? '*' : ' '} ${name}`);
+    process.exit(0);
+  }
   if (opts.help || files.length === 0) {
-    console.log(USAGE);
+    console.log(usage(defaultStyle));
     process.exit(opts.help ? 0 : 2);
   }
-  if (!STYLES[opts.style]) {
-    console.error(`md2pdf: unknown style "${opts.style}". Available: ${Object.keys(STYLES).join(', ')}`);
-    process.exit(2);
+  if (config.style && !STYLES[config.style]) {
+    console.error(`md2pdf: config style "${config.style}" no longer exists; using ${FALLBACK_STYLE}`);
   }
+  opts.style ??= defaultStyle;
+  if (!STYLES[opts.style]) unknownStyle(opts.style);
   if (opts.output && files.length > 1) {
     console.error('md2pdf: --output can only be used with a single input file');
     process.exit(2);

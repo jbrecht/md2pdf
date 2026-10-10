@@ -37,6 +37,7 @@ md2pdf *.md                     # convert several at once
 md2pdf notes.md -o ~/out.pdf    # choose the output path
 md2pdf notes.md -p A4           # page size (default: Letter)
 md2pdf notes.md --open          # open the PDF when done
+md2pdf notes.md -s classic      # use a specific style
 md2pdf notes.md --css my.css    # layer extra CSS on top of the style
 md2pdf notes.md --html          # also write the intermediate HTML (for tweaking CSS)
 ```
@@ -45,9 +46,23 @@ From Finder, a single file opens in Preview when done; multiple files show a not
 
 ## Styles
 
-Styles are registered in the `STYLES` map in `bin/md2pdf.js`: each is a list of CSS files inlined into the page in order. The `github` style combines `github-markdown-css`, highlight.js's GitHub theme, and print tweaks in `styles/github.css`.
+| Style     | Look |
+| --------- | ---- |
+| `github`  | GitHub's Markdown rendering: sans-serif, boxed tables, GitHub syntax colors |
+| `classic` | Book-like: Iowan Old Style serif, justified text, small-caps headings, ruled tables, page numbers |
 
-To add one, create `styles/<name>.css` (the content is wrapped in `<article class="markdown-body">`), register it in `STYLES`, and use `md2pdf -s <name>`. For one-off tweaks, `--css` is enough.
+Switch the default style — used by the Finder Quick Action, the keyboard shortcut and the `md2pdf` command:
+
+```sh
+./set-style.sh            # list styles (* marks the default)
+./set-style.sh classic    # make classic the default
+```
+
+The choice is saved in `~/.config/md2pdf/config.json`. Use `md2pdf -s <style>` to override it for one conversion.
+
+### Adding a style
+
+Styles are registered in the `STYLES` map in `bin/md2pdf.js`; each is a list of CSS files inlined into the page in order. Create `styles/<name>.css` (the content is wrapped in `<article class="markdown-body">`), register it in `STYLES`, and it's available to `-s` and `set-style.sh`. Use `md2pdf --html` to get the intermediate HTML for tweaking in a browser. For one-off tweaks, `--css` is enough.
 
 ## Development
 

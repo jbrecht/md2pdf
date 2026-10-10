@@ -66,3 +66,4 @@ fi
 echo
 echo "Done. Try:  md2pdf $ROOT/test/fixtures/sample.md"
 echo "Or right-click a .md file in Finder → Quick Actions → Convert to PDF"
+echo "Change the PDF style with:  $ROOT/set-style.sh"

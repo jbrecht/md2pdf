@@ -1,0 +1,310 @@
+/* Classic: book-like serif typography using fonts that ship with macOS. */
+
+:root {
+  --text: #1f1d1a;
+  --muted: #6b645b;
+  --accent: #7a2e2a;
+  --rule: #cfc5b4;
+  --paper: #f7f4ee;
+  --serif: "Iowan Old Style", Charter, Palatino, Georgia, serif;
+  --mono: "SF Mono", Menlo, monospace;
+}
+
+@page {
+  margin: 1in 1.1in 0.9in;
+  @bottom-center {
+    content: counter(page);
+    font-family: "Iowan Old Style", Charter, Palatino, Georgia, serif;
+    font-size: 9pt;
+    color: #6b645b;
+  }
+}
+@page :first {
+  @bottom-center {
+    content: none;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}
+
+.markdown-body {
+  font-family: var(--serif);
+  font-size: 11pt;
+  line-height: 1.55;
+  color: var(--text);
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  font-kerning: normal;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.markdown-body p,
+.markdown-body li {
+  text-align: justify;
+  hyphens: auto;
+  orphans: 3;
+  widows: 3;
+}
+
+.markdown-body p {
+  margin: 0 0 0.75em;
+}
+
+/* Headings */
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-family: var(--serif);
+  font-weight: normal;
+  line-height: 1.25;
+  break-after: avoid;
+  font-variant-numeric: lining-nums;
+}
+
+.markdown-body h1 {
+  font-size: 24pt;
+  text-align: center;
+  letter-spacing: 0.01em;
+  margin: 0 0 1.4em;
+}
+.markdown-body h1::after {
+  content: "";
+  display: block;
+  width: 3em;
+  margin: 0.55em auto 0;
+  border-bottom: 1px solid var(--accent);
+}
+/* Any later h1 starts a new section with a bit more air. */
+.markdown-body h1:not(:first-child) {
+  margin-top: 2em;
+}
+
+.markdown-body h2 {
+  font-size: 13pt;
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin: 1.8em 0 0.6em;
+}
+
+.markdown-body h3 {
+  font-size: 12pt;
+  font-style: italic;
+  margin: 1.4em 0 0.4em;
+}
+
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: 11pt;
+  font-weight: bold;
+  margin: 1.2em 0 0.3em;
+}
+
+/* Links */
+
+.markdown-body a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.markdown-body a.header-anchor {
+  display: none;
+}
+
+/* Lists */
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.6em;
+}
+.markdown-body li {
+  margin: 0.15em 0;
+}
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin: 0.15em 0 0;
+}
+.markdown-body li::marker {
+  color: var(--muted);
+}
+.markdown-body .task-list-item {
+  list-style-type: none;
+}
+.markdown-body .task-list-item input {
+  margin: 0 0.4em 0.2em -1.4em;
+  vertical-align: middle;
+  accent-color: var(--accent);
+}
+
+/* Quotes */
+
+.markdown-body blockquote {
+  margin: 1.1em 2em;
+  padding: 0 0 0 1em;
+  border-left: 2px solid var(--rule);
+  font-style: italic;
+  color: #4a4540;
+  break-inside: avoid;
+}
+.markdown-body blockquote p {
+  text-align: left;
+}
+
+/* Code */
+
+.markdown-body code,
+.markdown-body kbd {
+  font-family: var(--mono);
+  font-size: 0.82em;
+  font-variant-numeric: normal;
+}
+.markdown-body :not(pre) > code {
+  background: var(--paper);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+.markdown-body kbd {
+  padding: 0.05em 0.35em;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: #fff;
+}
+.markdown-body pre {
+  background: var(--paper);
+  border: 1px solid #e8e1d4;
+  border-radius: 4px;
+  padding: 0.9em 1.1em;
+  margin: 0 0 1em;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  break-inside: avoid;
+}
+.markdown-body pre code {
+  font-size: 8.5pt;
+}
+
+/* Muted syntax colors to suit the page. */
+.hljs-comment,
+.hljs-quote {
+  color: #8a8279;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag {
+  color: #a3372f;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: #4d6b3c;
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: #8a5a00;
+}
+.hljs-title,
+.hljs-section,
+.hljs-name {
+  color: #2c4a6e;
+}
+.hljs-built_in,
+.hljs-type,
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable {
+  color: #6b4c7a;
+}
+.hljs-meta,
+.hljs-deletion {
+  color: #9a3b2f;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: bold;
+}
+
+/* Tables: horizontal rules only, like a well-set book. */
+
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 1.2em auto;
+  border-top: 1.5px solid var(--text);
+  border-bottom: 1.5px solid var(--text);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.markdown-body th,
+.markdown-body td {
+  padding: 0.35em 0.9em;
+  text-align: left;
+}
+.markdown-body th {
+  font-weight: normal;
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  border-bottom: 0.75px solid var(--text);
+}
+.markdown-body tr {
+  break-inside: avoid;
+}
+
+/* Rules and images */
+
+.markdown-body hr {
+  border: 0;
+  text-align: center;
+  margin: 1.6em 0;
+}
+.markdown-body hr::after {
+  content: "⁂";
+  color: var(--muted);
+  font-size: 12pt;
+}
+
+.markdown-body img {
+  display: block;
+  max-width: 100%;
+  margin: 1em auto;
+  break-inside: avoid;
+}
+
+/* Footnotes */
+
+.markdown-body hr.footnotes-sep {
+  display: none;
+}
+.markdown-body .footnotes {
+  margin-top: 2.5em;
+  font-size: 9pt;
+  color: var(--muted);
+}
+.markdown-body .footnotes::before {
+  content: "";
+  display: block;
+  width: 30%;
+  border-top: 0.75px solid var(--rule);
+  margin-bottom: 0.8em;
+}
+.markdown-body .footnotes ol {
+  padding-left: 1.2em;
+}
+.markdown-body .footnote-ref a,
+.markdown-body .footnote-backref {
+  color: var(--accent);
+}

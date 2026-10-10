@@ -2,6 +2,7 @@
 # Removes the md2pdf launcher and Finder Quick Action installed by install.sh.
 
 rm -f "$HOME/.local/bin/md2pdf"
+rm -rf "$HOME/.config/md2pdf"
 rm -rf "$HOME/Library/Services/Convert to PDF.workflow"
 
 # Remove the keyboard shortcut from the Services preferences.
