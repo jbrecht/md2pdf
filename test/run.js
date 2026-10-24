@@ -8,6 +8,7 @@ import { mkdtempSync, readFileSync, existsSync, copyFileSync, mkdirSync, rmSync 
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildDocument, cssString, headingText } from '../lib/render.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'bin', 'md2pdf.js');
@@ -101,12 +102,54 @@ test('classic style renders with its own stylesheet', () => {
   assert.ok(existsSync(join(dir, 'sample.pdf')));
 });
 
+for (const [style, marker] of [
+  ['academic', /counter\(h2\) "\." counter\(h3\)/],
+  ['modern', /Avenir Next/],
+  ['report', /content: var\(--document-title\)/],
+  ['resume', /h1 \+ p/],
+]) {
+  test(`${style} style renders with its own stylesheet`, () => {
+    const dir = workspace();
+    const r = run('-s', style, '--html', join(dir, 'sample.md'));
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(readFileSync(join(dir, 'sample.html'), 'utf8'), marker);
+    assert.ok(pageCount(join(dir, 'sample.pdf')) >= 1);
+  });
+}
+
+test('gives styles the first heading for running headers', () => {
+  const dir = workspace();
+  const r = run('--html', join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(readFileSync(join(dir, 'sample.html'), 'utf8'), /--document-title: "md2pdf Sample Document";/);
+});
+
+test('headingText takes the rendered first h1, not its Markdown source', () => {
+  assert.equal(headingText('<p>x</p><h1 id="q3">Q3 <strong>Revenue</strong> &amp; “costs” 🚀</h1><h1>Later</h1>'), 'Q3 Revenue & “costs” 🚀');
+  assert.equal(headingText('<h2>Only a subheading</h2>'), '');
+});
+
+test('the running-header title is the first heading, empty without one, never the file name', () => {
+  const doc = (bodyHtml) => buildDocument({ bodyHtml, title: 'file-stem', css: '' });
+  assert.match(doc('<h1>Real <em>Title</em></h1>'), /--document-title: "Real Title";/);
+  assert.match(doc('<p>No heading</p>'), /--document-title: "";/);
+});
+
+test('cssString escapes what would end the string or the <style> element', () => {
+  assert.equal(cssString('plain'), '"plain"');
+  assert.equal(cssString('say "hi" \\ bye'), '"say \\"hi\\" \\\\ bye"');
+  assert.equal(cssString('a</style>b'), '"a\\3c /style>b"');
+  assert.equal(cssString('one\ntwo\rthree'), '"one\\a two\\d three"');
+});
+
 test('--list-styles marks github as the default when no config exists', () => {
   rmSync(CONFIG, { force: true });
   const r = run('--list-styles');
   assert.equal(r.status, 0);
   assert.match(r.stdout, /^\* github$/m);
-  assert.match(r.stdout, /^  classic$/m);
+  for (const style of ['classic', 'academic', 'modern', 'report', 'resume']) {
+    assert.match(r.stdout, new RegExp(`^  ${style}$`, 'm'));
+  }
 });
 
 test('--set-style changes the default used for conversions', () => {

@@ -24,6 +24,10 @@ const STYLES = {
     join(ROOT, 'styles', 'github.css'),
   ],
   classic: [join(ROOT, 'styles', 'classic.css')],
+  academic: [join(ROOT, 'styles', 'academic.css')],
+  modern: [join(ROOT, 'styles', 'modern.css')],
+  report: [join(ROOT, 'styles', 'report.css')],
+  resume: [join(ROOT, 'styles', 'resume.css')],
 };
 const FALLBACK_STYLE = 'github';
 

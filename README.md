@@ -6,7 +6,7 @@ Convert Markdown to beautifully styled PDFs. This is the rendering engine and ma
 - **On a Mac and comfortable with a terminal?** Install the command-line tool below. It adds a Finder right-click action and a keyboard shortcut.
 - **Building something?** Use the renderer and styles as a dependency (see [Using the renderer](#using-the-renderer)).
 
-Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, and page breaks (`<div class="page-break"></div>`). Two print styles are included: `github` and `classic`.
+Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, and page breaks (`<div class="page-break"></div>`). Six print styles are included: `github`, `classic`, `academic`, `modern`, `report` and `resume`.
 
 # Command-line tool (macOS)
 
@@ -58,6 +58,10 @@ From Finder, a single file opens in Preview when done; multiple files show a not
 | --------- | ---- |
 | `github`  | GitHub's Markdown rendering: sans-serif, boxed tables, GitHub syntax colors |
 | `classic` | Book-like: Iowan Old Style serif, justified text, small-caps headings, ruled tables, page numbers |
+| `academic` | Journal article: Palatino, numbered sections (1, 1.1, 1.1.1), booktabs tables, journal-style footnotes |
+| `modern`  | Clean sans-serif (Avenir Next / Segoe UI), generous whitespace, one blue accent |
+| `report`  | Business or technical report: title block from the first heading, running header with the title, "Page N of M" footers, gridded tables |
+| `resume`  | Compact and one-page friendly: the first heading is your name, the paragraph after it your contact line, `##` headings are ruled section dividers |
 
 Switch the default style — used by the Finder Quick Action, the keyboard shortcut and the `md2pdf` command:
 
@@ -72,12 +76,14 @@ The choice is saved in `~/.config/md2pdf/config.json`. Use `md2pdf -s <style>` t
 
 Styles are registered in the `STYLES` map in `bin/md2pdf.js`; each is a list of CSS files inlined into the page in order. Create `styles/<name>.css` (the content is wrapped in `<article class="markdown-body">`), register it in `STYLES`, and it's available to `-s` and `set-style.sh`. Use `md2pdf --html` to get the intermediate HTML for tweaking in a browser. For one-off tweaks, `--css` is enough.
 
+The text of the document's first `#` heading (empty if there is none) is available to page margin boxes as `var(--document-title)`, e.g. `@top-left { content: var(--document-title); }`, as the `report` style does.
+
 # Using the renderer
 
 The Markdown renderer and the print styles can be installed straight from GitHub:
 
 ```sh
-npm install github:jbrecht/md2pdf#v1.0.0
+npm install github:jbrecht/md2pdf#v1.1.0
 ```
 
 ```js
@@ -95,8 +101,8 @@ const html = buildDocument({
 
 | Export | What it is |
 | ------ | ---------- |
-| `md2pdf/render` | `createRenderer({ hljs, math? })`, `buildDocument(...)`, `titleOf(markdown, fallback)`, `escapeHtml(s)` |
-| `md2pdf/styles/classic.css` | The Classic style |
+| `md2pdf/render` | `createRenderer({ hljs, math? })`, `buildDocument(...)`, `titleOf(markdown, fallback)`, `escapeHtml(s)`, `cssString(s)`, `headingText(html)` |
+| `md2pdf/styles/<name>.css` | The `classic`, `academic`, `modern`, `report` and `resume` styles |
 | `md2pdf/styles/github.css` | Print adjustments for the GitHub style; use it after `github-markdown-css` and highlight.js's `github.css` theme |
 
 `createRenderer` takes the highlight.js instance to use (so you can pass a smaller bundle such as `highlight.js/lib/common`) and, optionally, `math: { texmath, katex }` from `markdown-it-texmath` and `katex` to render `\( \)`, `\[ \]`, `$` and `$$` formulas.
