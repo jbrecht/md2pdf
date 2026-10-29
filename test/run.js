@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync, existsSync, copyFileSync, mkdirSync, rmSync 
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildDocument, cssString, headingText } from '../lib/render.js';
+import { buildDocument, createRenderer, cssString, headingText } from '../lib/render.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'bin', 'md2pdf.js');
@@ -55,6 +55,71 @@ test('renders GitHub-flavored features into the HTML', () => {
   assert.match(html, /class="footnotes"/);
   assert.match(html, /🚀/);
 });
+
+const render = (markdown) =>
+  createRenderer({ hljs: { getLanguage: () => undefined } }).render(markdown).replace(/<svg[^]*?<\/svg>/g, '<svg/>');
+
+test('GitHub alerts render as titled boxes in their own family', () => {
+  for (const type of ['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION']) {
+    const family = type.toLowerCase();
+    const title = type[0] + family.slice(1);
+    assert.equal(
+      render(`> [!${type}]\n> Body *text*.`),
+      `<div class="markdown-alert markdown-alert-${family}" data-callout="${family}">\n` +
+        `<p class="markdown-alert-title"><svg/>${title}</p>\n<p>Body <em>text</em>.</p>\n</div>\n`,
+    );
+  }
+});
+
+test('Obsidian callouts take a title, ignore fold markers and map types to families', () => {
+  assert.equal(
+    render('> [!question]- Is it **done**?\n> Not yet.\n>\n> - one'),
+    '<div class="markdown-alert markdown-alert-warning" data-callout="question">\n' +
+      '<p class="markdown-alert-title"><svg/>Is it <strong>done</strong>?</p>\n<p>Not yet.</p>\n<ul>\n<li>one</li>\n</ul>\n</div>\n',
+  );
+  assert.match(render('> [!bug]+ Crash on save'), /^<div class="markdown-alert markdown-alert-caution" data-callout="bug">\n<p class="markdown-alert-title"><svg\/>Crash on save<\/p>\n<\/div>/);
+  assert.match(render('> [!success]\n> Shipped.'), /markdown-alert-tip" data-callout="success"[^]*>Success<\/p>/);
+  assert.match(render('> [!example]\n> x'), /markdown-alert-important/);
+  assert.match(render('> [!cite]\n> x'), /markdown-alert-quote/);
+});
+
+test('unknown callout types look like notes; ordinary and nested quotes still work', () => {
+  assert.match(render('> [!mystery]\n> x'), /markdown-alert-note" data-callout="mystery"[^]*>Mystery<\/p>/);
+  assert.equal(render('> Just a quote, [!note] and all.'), '<blockquote>\n<p>Just a quote, [!note] and all.</p>\n</blockquote>\n');
+  assert.match(render('> > [!tip]\n> > inner'), /^<blockquote>\n<div class="markdown-alert markdown-alert-tip"[^]*<\/div>\n<\/blockquote>/);
+});
+
+test('a callout closes at its own blockquote, around quotes nested in it and inside list items', () => {
+  assert.equal(
+    render('> [!note]\n> > inner\n>\n> after'),
+    '<div class="markdown-alert markdown-alert-note" data-callout="note">\n<p class="markdown-alert-title"><svg/>Note</p>\n' +
+      '<blockquote>\n<p>inner</p>\n</blockquote>\n<p>after</p>\n</div>\n',
+  );
+  assert.equal(
+    render('- > [!tip]\n  > x'),
+    '<ul>\n<li>\n<div class="markdown-alert markdown-alert-tip" data-callout="tip">\n' +
+      '<p class="markdown-alert-title"><svg/>Tip</p>\n<p>x</p>\n</div>\n</li>\n</ul>\n',
+  );
+});
+
+for (const style of ['github', 'classic', 'academic', 'modern', 'report', 'resume']) {
+  test(`${style} style gives each callout family its own look`, () => {
+    const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+    copyFileSync(join(FIXTURES, 'callouts.md'), join(dir, 'callouts.md'));
+    const r = run('-s', style, '--html', join(dir, 'callouts.md'));
+    assert.equal(r.status, 0, r.stderr);
+    const html = readFileSync(join(dir, 'callouts.html'), 'utf8');
+    // Each family's color: GitHub's border-left-color, or the --callout variable our styles define.
+    const colorOf = (family) =>
+      html.match(new RegExp(`\\.markdown-alert(?:\\.markdown-alert)?-${family} \\{\\s*(?:--callout|border-left-color): ([^;]+);`))?.[1] ??
+      (family === 'note' ? html.match(/\.markdown-alert \{\s*--callout: ([^;]+);/)?.[1] : undefined);
+    const colors = ['note', 'tip', 'important', 'warning', 'caution', 'quote'].map(colorOf);
+    assert.ok(colors.every(Boolean), `missing a family color: ${colors}`);
+    assert.equal(new Set(colors).size, 6, `families share a color: ${colors}`);
+    if (style !== 'github') assert.match(html, /\.markdown-alert-title \{[^}]*color: var\(--callout\);/);
+    assert.ok(pageCount(join(dir, 'callouts.pdf')) >= 1);
+  });
+}
 
 test('--output writes to the given path', () => {
   const dir = workspace();

@@ -48,6 +48,7 @@ body {
 
 .markdown-body pre,
 .markdown-body blockquote,
+.markdown-body .markdown-alert,
 .markdown-body tr,
 .markdown-body img {
   break-inside: avoid;
@@ -69,6 +70,22 @@ body {
 .markdown-body .task-list-item input {
   margin: 0 0.35em 0.25em -1.4em;
   vertical-align: middle;
+}
+
+/* github-markdown-css colors GitHub's five alert types. Its flex title would drop the spaces around
+   formatting in an Obsidian title, so the icon sits inline instead. Quote is ours. */
+.markdown-body .markdown-alert .markdown-alert-title {
+  display: block;
+  line-height: inherit;
+}
+.markdown-body .markdown-alert-title .octicon {
+  margin-right: 0.5rem;
+}
+.markdown-body .markdown-alert.markdown-alert-quote {
+  border-left-color: #59636e;
+}
+.markdown-body .markdown-alert.markdown-alert-quote .markdown-alert-title {
+  color: #59636e;
 }
 
 /* highlight.js's theme adds its own padding and background; GitHub's <pre> already has them. */
