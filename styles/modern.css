@@ -157,6 +157,48 @@ body {
   margin-bottom: 0;
 }
 
+/* Callouts (GitHub alerts and Obsidian callouts): a tinted card in the callout's color. */
+
+.markdown-body .markdown-alert {
+  --callout: var(--accent);
+  margin: 1.4em 0;
+  padding: 0.8em 1.1em;
+  border-left: 3px solid var(--callout);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--callout) 7%, #fff);
+  break-inside: avoid;
+}
+.markdown-body .markdown-alert-tip {
+  --callout: #1f7a4d;
+}
+.markdown-body .markdown-alert-important {
+  --callout: #7048b5;
+}
+.markdown-body .markdown-alert-warning {
+  --callout: #a5650b;
+}
+.markdown-body .markdown-alert-caution {
+  --callout: #c0392b;
+}
+.markdown-body .markdown-alert-quote {
+  --callout: var(--muted);
+}
+.markdown-body .markdown-alert-title {
+  margin-bottom: 0.4em;
+  color: var(--callout);
+  font-weight: 600;
+}
+.markdown-body .markdown-alert-title .octicon {
+  margin-right: 0.5em;
+  vertical-align: -0.1em;
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}
+.markdown-body .markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
 /* Code */
 
 .markdown-body code,

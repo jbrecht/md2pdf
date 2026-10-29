@@ -1,6 +1,6 @@
 {
   "name": "md2pdf",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Markdown to beautifully styled PDF: the renderer and macOS CLI behind md2pdf.me",
   "type": "module",
   "license": "MIT",
