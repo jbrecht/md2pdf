@@ -136,7 +136,55 @@ test('the CLI takes the document title from front matter when there is no headin
   assert.equal(html.match(/<article class="markdown-body">\n([^]*)<\/article>/)[1], '<p>Just a paragraph.</p>\n\n');
 });
 
+test('wikilinks render as the text Obsidian shows', () => {
+  assert.equal(render('[[Note]] [[Note|alias]] [[Note#Heading]] [[Note#A#B]]'), '<p>Note alias Note &gt; Heading Note &gt; A &gt; B</p>\n');
+  assert.equal(render('[[Note#^block-id]] [[ Spaced | Alias ]] [[folder/Note.md]]'), '<p>Note Alias folder/Note.md</p>\n');
+  assert.equal(render('[[Note\\|escaped pipe]]'), '<p>escaped pipe</p>\n');
+  assert.match(render('| a |\n|---|\n| [[Note\\|in a table]] |'), /<td>in a table<\/td>/);
+  assert.equal(render('## My **bold** heading\n\nSee [[#My bold heading]].'),
+    '<h2 id="my-bold-heading" tabindex="-1">My <strong>bold</strong> heading</h2>\n<p>See <a href="#my-bold-heading">My bold heading</a>.</p>\n');
+  // The link must match the heading's id after typographer and emoji replacements.
+  for (const heading of ['A -- B', 'Notes (c) 2024', ':rocket: Launch']) {
+    const html = render(`## ${heading}\n\n[[#${heading}]]`);
+    assert.equal(html.match(/<a href="#([^"]+)"/)[1], html.match(/<h2 id="([^"]+)"/)[1], heading);
+  }
+});
+
+test('brackets that are not wikilinks render as before', () => {
+  assert.equal(render('\\[[escaped]] `[[code]]` [[unclosed and [[]] [[a\nb]]'), '<p>[[escaped]] <code>[[code]]</code> [[unclosed and [[]] [[a\nb]]</p>\n');
+  // AI assistants write citations as [[1]](url): a link whose text is [1].
+  assert.equal(render('Cited.[[1]](https://example.com)'), '<p>Cited.<a href="https://example.com">[1]</a></p>\n');
+  assert.equal(render('[[|]] ![[|]] ![[|alias]]'), '<p>[[|]] ![[|]] ![[|alias]]</p>\n');
+  // Obsidian reads any [[…]] as a wikilink, so bracketed prose outside code loses its brackets too.
+  assert.equal(render('the matrix [[1, 2]]'), '<p>the matrix 1, 2</p>\n');
+  assert.equal(render('[see [[Note]] here](https://example.com)'), '<p><a href="https://example.com">see Note here</a></p>\n');
+});
+
+test('image embeds render as images; other embeds as a labelled placeholder', () => {
+  assert.equal(render('![[Pasted image 1.png]]'), '<p><img src="Pasted%20image%201.png" alt="Pasted image 1.png"></p>\n');
+  assert.equal(render('![[a.png|A cat]] ![[a.png|300]] ![[a.png|300x200]]'),
+    '<p><img src="a.png" alt="A cat"> <img src="a.png" alt="a.png" width="300"> <img src="a.png" alt="a.png" width="300" height="200"></p>\n');
+  assert.equal(render('![[Other note]]'), '<p><span class="markdown-embed">Embedded note: Other note</span></p>\n');
+  assert.equal(render('![[Other note#Part|Alias]] ![[Slides.pdf]]'),
+    '<p><span class="markdown-embed">Embedded note: Other note &gt; Part</span> <span class="markdown-embed">Embedded file: Slides.pdf</span></p>\n');
+  assert.equal(render('![[javascript:alert(1).png]]'), '<p><img src="" alt="javascript:alert(1).png"></p>\n');
+  assert.equal(render('![[<b>x</b>]]'), '<p><span class="markdown-embed">Embedded note: &lt;b&gt;x&lt;/b&gt;</span></p>\n');
+});
+
+test('the CLI loads an embedded image relative to the note', () => {
+  const dir = workspace();
+  writeFileSync(join(dir, 'note.md'), 'Chart:\n\n![[images/bar.png]]\n');
+  const r = run(join(dir, 'note.md'));
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(readFileSync(join(dir, 'note.pdf'), 'latin1'), /\/Subtype\s*\/Image/);
+});
+
 for (const style of ['github', 'classic', 'academic', 'modern', 'report', 'resume']) {
+  test(`${style} style mutes embed placeholders`, () => {
+    const css = readFileSync(join(ROOT, 'styles', `${style}.css`), 'utf8');
+    assert.match(css, /\.markdown-body \.markdown-embed \{[^}]*color: [^;]+;/);
+  });
+
   test(`${style} style gives each callout family its own look`, () => {
     const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
     copyFileSync(join(FIXTURES, 'callouts.md'), join(dir, 'callouts.md'));

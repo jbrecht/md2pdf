@@ -362,6 +362,12 @@ body {
   margin: 0 0 0.3em;
 }
 
+/* An Obsidian embed (![[Other note]]) that can't be shown: a muted placeholder. */
+.markdown-body .markdown-embed {
+  color: var(--muted);
+  font-style: italic;
+}
+
 /* <div class="page-break"></div> starts a new page. */
 .markdown-body .page-break {
   break-after: page;
