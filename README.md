@@ -6,7 +6,7 @@ Convert Markdown to beautifully styled PDFs. This is the rendering engine and ma
 - **On a Mac and comfortable with a terminal?** Install the command-line tool below. It adds a Finder right-click action and a keyboard shortcut.
 - **Building something?** Use the renderer and styles as a dependency (see [Using the renderer](#using-the-renderer)).
 
-Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, GitHub alerts and Obsidian callouts (`> [!NOTE]`, `> [!tip] Custom title`), YAML front matter (left out of the PDF; its `title:` names the document when there is no `#` heading), and page breaks (`<div class="page-break"></div>`). Six print styles are included: `github`, `classic`, `academic`, `modern`, `report` and `resume`.
+Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, GitHub alerts and Obsidian callouts (`> [!NOTE]`, `> [!tip] Custom title`), Obsidian wikilinks and embeds (`[[Note|alias]]` prints as plain text, `![[image.png]]` as an image, and an embedded note as a placeholder naming it), YAML front matter (left out of the PDF; its `title:` names the document when there is no `#` heading), and page breaks (`<div class="page-break"></div>`). Six print styles are included: `github`, `classic`, `academic`, `modern`, `report` and `resume`.
 
 # Command-line tool (macOS)
 
