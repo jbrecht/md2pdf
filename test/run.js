@@ -4,11 +4,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, copyFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildDocument, createRenderer, cssString, headingText } from '../lib/render.js';
+import { buildDocument, createRenderer, cssString, headingText, titleOf } from '../lib/render.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'bin', 'md2pdf.js');
@@ -100,6 +100,40 @@ test('a callout closes at its own blockquote, around quotes nested in it and ins
     '<ul>\n<li>\n<div class="markdown-alert markdown-alert-tip" data-callout="tip">\n' +
       '<p class="markdown-alert-title"><svg/>Tip</p>\n<p>x</p>\n</div>\n</li>\n</ul>\n',
   );
+});
+
+test('front matter at the start of the document is left out', () => {
+  assert.equal(render('---\ntitle: Notes\ntags: [a, b]\n---\n\n# Heading\n\nBody'), '<h1 id="heading" tabindex="-1">Heading</h1>\n<p>Body</p>\n');
+  assert.equal(render('---\r\ntitle: Notes\r\n---\r\nBody'), '<p>Body</p>\n');
+  assert.equal(render('---\n---\nBody'), '<p>Body</p>\n');
+  assert.equal(render('---\ntitle: Notes\n---'), '');
+});
+
+test('--- elsewhere, unclosed or longer still renders as before', () => {
+  assert.equal(render('Intro\n\n---\n\nAfter'), '<p>Intro</p>\n<hr>\n<p>After</p>\n');
+  assert.equal(render('---\nnot closed\n\nBody'), '<hr>\n<p>not closed</p>\n<p>Body</p>\n');
+  assert.equal(render('----\nsetext\n----'), '<hr>\n<h2 id="setext" tabindex="-1">setext</h2>\n');
+  assert.match(render('> ---\n> quoted\n> ---'), /^<blockquote>\n<hr>/);
+});
+
+test('titleOf skips front matter and falls back to its title field', () => {
+  assert.equal(titleOf('---\ntitle: From YAML\n---\n# From heading', 'stem'), 'From heading');
+  assert.equal(titleOf('---\ntitle: From YAML\n---\nNo heading', 'stem'), 'From YAML');
+  assert.equal(titleOf('---\n# a YAML comment\ntitle: From YAML\n---\nNo heading', 'stem'), 'From YAML');
+  assert.equal(titleOf('---\ntitle: "Quoted: title"\n---\n', 'stem'), 'Quoted: title');
+  assert.equal(titleOf("---\nsubtitle: x\ntitle: 'Single'\n---\n", 'stem'), 'Single');
+  assert.equal(titleOf('---\ntags: [a]\n---\nNothing', 'stem'), 'stem');
+  assert.equal(titleOf('title: Not front matter\n', 'stem'), 'stem');
+});
+
+test('the CLI takes the document title from front matter when there is no heading', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  writeFileSync(join(dir, 'note.md'), '---\ntitle: Weekly notes\n---\n\nJust a paragraph.\n');
+  const r = run('--html', join(dir, 'note.md'));
+  assert.equal(r.status, 0, r.stderr);
+  const html = readFileSync(join(dir, 'note.html'), 'utf8');
+  assert.match(html, /<title>Weekly notes<\/title>/);
+  assert.equal(html.match(/<article class="markdown-body">\n([^]*)<\/article>/)[1], '<p>Just a paragraph.</p>\n\n');
 });
 
 for (const style of ['github', 'classic', 'academic', 'modern', 'report', 'resume']) {

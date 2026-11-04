@@ -6,7 +6,7 @@ Convert Markdown to beautifully styled PDFs. This is the rendering engine and ma
 - **On a Mac and comfortable with a terminal?** Install the command-line tool below. It adds a Finder right-click action and a keyboard shortcut.
 - **Building something?** Use the renderer and styles as a dependency (see [Using the renderer](#using-the-renderer)).
 
-Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, GitHub alerts and Obsidian callouts (`> [!NOTE]`, `> [!tip] Custom title`), and page breaks (`<div class="page-break"></div>`). Six print styles are included: `github`, `classic`, `academic`, `modern`, `report` and `resume`.
+Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, GitHub alerts and Obsidian callouts (`> [!NOTE]`, `> [!tip] Custom title`), YAML front matter (left out of the PDF; its `title:` names the document when there is no `#` heading), and page breaks (`<div class="page-break"></div>`). Six print styles are included: `github`, `classic`, `academic`, `modern`, `report` and `resume`.
 
 # Command-line tool (macOS)
 
@@ -101,7 +101,7 @@ const html = buildDocument({
 
 | Export | What it is |
 | ------ | ---------- |
-| `md2pdf/render` | `createRenderer({ hljs, math? })`, `buildDocument(...)`, `titleOf(markdown, fallback)`, `escapeHtml(s)`, `cssString(s)`, `headingText(html)` |
+| `md2pdf/render` | `createRenderer({ hljs, math? })`, `buildDocument(...)`, `titleOf(markdown, fallback)` (the first `#` heading, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)` |
 | `md2pdf/styles/<name>.css` | The `classic`, `academic`, `modern`, `report` and `resume` styles |
 | `md2pdf/styles/github.css` | Print adjustments for the GitHub style; use it after `github-markdown-css` and highlight.js's `github.css` theme |
 
