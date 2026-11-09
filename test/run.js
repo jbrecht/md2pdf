@@ -29,6 +29,101 @@ function workspace() {
   return dir;
 }
 
+// A document with every kind of block whose spacing a style sets.
+const SPACING_DOC = `# Title
+
+Contact line under the title.
+
+## Section
+
+### Subsection
+
+A paragraph long enough to wrap across more than one line of the page, so line height has something to act on here.
+
+A second paragraph straight after the first.
+
+#### Fourth
+
+##### Fifth
+
+###### Sixth
+
+- One
+- Two
+  - Nested
+- [ ] A task
+- [x] Another task
+
+1. An item with a paragraph.
+
+   Its second paragraph.
+
+2. Another item.
+
+> A quote.
+>
+> Its second paragraph.
+
+> [!NOTE]
+> A callout.
+
+\`\`\`js
+const a = 1;
+\`\`\`
+
+| A | B |
+| - | - |
+| 1 | 2 |
+
+---
+
+![Blue bar](images/bar.png)
+
+# A later title
+
+Text with a footnote.[^1]
+
+[^1]: The footnote.
+`;
+
+// Each element's vertical margins, line height and font size in px, as Chrome computes them for an
+// HTML file written by --html.
+function computedSpacing(htmlFile, dir) {
+  const probe = `<script>
+    const out = [];
+    for (const el of document.querySelectorAll('.markdown-body, .markdown-body *')) {
+      for (const pseudo of [null, '::before', '::after']) {
+        const s = getComputedStyle(el, pseudo);
+        if (s.display === 'none' || (pseudo && s.content === 'none')) continue;
+        out.push({
+          what: el.tagName.toLowerCase() + (el.getAttribute('class') ? '.' + el.getAttribute('class').split(' ').join('.') : '') + (pseudo ?? ''),
+          top: parseFloat(s.marginTop), bottom: parseFloat(s.marginBottom),
+          lineHeight: parseFloat(s.lineHeight) || 0, fontSize: parseFloat(s.fontSize),
+        });
+      }
+    }
+    const pre = document.createElement('pre');
+    pre.id = 'spacing-out';
+    pre.textContent = JSON.stringify(out);
+    document.body.append(pre);
+  </script>`;
+  const probed = htmlFile.replace(/\.html$/, '.probe.html');
+  writeFileSync(probed, readFileSync(htmlFile, 'utf8').replace('</body>', `${probe}</body>`));
+  // The browsers bin/md2pdf.js looks for, in its order.
+  const chrome = process.env.CHROME_PATH ?? [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+    '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+  ].find((p) => existsSync(p));
+  const r = spawnSync(chrome, ['--headless', '--disable-gpu', '--no-first-run', `--user-data-dir=${join(dir, 'chrome')}`,
+    '--window-size=816,1056', '--dump-dom', `file://${probed}`], { encoding: 'utf8', timeout: 60000 });
+  const json = r.stdout.match(/<pre id="spacing-out">([^<]*)<\/pre>/)?.[1];
+  assert.ok(json, `no output from Chrome: ${r.stderr}`);
+  return JSON.parse(json.replaceAll('&gt;', '>').replaceAll('&lt;', '<').replaceAll('&amp;', '&'));
+}
+
 test('converts Markdown to a PDF next to the source file', () => {
   const dir = workspace();
   const out = execFileSync(process.execPath, [CLI, join(dir, 'sample.md')], { encoding: 'utf8' });
@@ -183,6 +278,45 @@ for (const style of ['github', 'classic', 'academic', 'modern', 'report', 'resum
   test(`${style} style mutes embed placeholders`, () => {
     const css = readFileSync(join(ROOT, 'styles', `${style}.css`), 'utf8');
     assert.match(css, /\.markdown-body \.markdown-embed \{[^}]*color: [^;]+;/);
+  });
+
+  test(`${style} style takes its line heights and vertical gaps from --leading and --space`, () => {
+    assert.match(readFileSync(join(ROOT, 'styles', `${style}.css`), 'utf8'), /:root \{[^}]*--leading: 1;\s*--space: 1;/);
+    const dir = workspace();
+    try {
+      // Different factors, so a gap scaled by --leading or a line height scaled by --space shows up.
+      const LEADING = 2;
+      const SPACE = 3;
+      writeFileSync(join(dir, 'spacing.md'), SPACING_DOC);
+      writeFileSync(join(dir, 'none.css'), '');
+      writeFileSync(join(dir, 'scaled.css'), `:root { --leading: ${LEADING}; --space: ${SPACE}; }`);
+      const [base, scaled] = ['none', 'scaled'].map((variant) => {
+        const md = join(dir, `${variant}.md`);
+        copyFileSync(join(dir, 'spacing.md'), md);
+        const r = run('-s', style, '--css', join(dir, `${variant}.css`), '--html', md);
+        assert.equal(r.status, 0, r.stderr);
+        return computedSpacing(join(dir, `${variant}.html`), dir);
+      });
+      assert.equal(base.length, scaled.length);
+      const failures = [];
+      base.forEach((b, i) => {
+        const s = scaled[i];
+        // The task-list checkbox's bottom margin aligns it with its text; it isn't a gap.
+        if (!b.what.startsWith('input')) {
+          for (const side of ['top', 'bottom']) {
+            if (b[side] !== 0 && Math.abs(s[side] - SPACE * b[side]) > 0.5) failures.push(`${b.what} margin-${side} ${b[side]} → ${s[side]}`);
+          }
+        }
+        // --leading scales a line height's excess over the font size.
+        const excess = b.lineHeight - b.fontSize;
+        if (excess > 0.5 && Math.abs(s.lineHeight - s.fontSize - LEADING * excess) > 0.5) {
+          failures.push(`${b.what} line-height ${b.lineHeight} → ${s.lineHeight} (font ${b.fontSize})`);
+        }
+      });
+      assert.deepEqual(failures, []);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test(`${style} style gives each callout family its own look`, () => {

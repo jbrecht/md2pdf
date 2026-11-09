@@ -1,6 +1,10 @@
 /* Classic: book-like serif typography using fonts that ship with macOS. */
 
 :root {
+  /* Spacing scales, 1 as designed: --leading scales each line height's excess over 1,
+     --space the vertical gaps between blocks. */
+  --leading: 1;
+  --space: 1;
   --text: #1f1d1a;
   --muted: #6b645b;
   --accent: #7a2e2a;
@@ -38,7 +42,7 @@ body {
 .markdown-body {
   font-family: var(--serif);
   font-size: 11pt;
-  line-height: 1.55;
+  line-height: calc(1 + 0.55 * var(--leading));
   color: var(--text);
   font-variant-numeric: oldstyle-nums proportional-nums;
   font-kerning: normal;
@@ -55,7 +59,7 @@ body {
 }
 
 .markdown-body p {
-  margin: 0 0 0.75em;
+  margin: 0 0 calc(0.75em * var(--space));
 }
 
 /* Headings */
@@ -68,7 +72,7 @@ body {
 .markdown-body h6 {
   font-family: var(--serif);
   font-weight: normal;
-  line-height: 1.25;
+  line-height: calc(1 + 0.25 * var(--leading));
   break-after: avoid;
   font-variant-numeric: lining-nums;
 }
@@ -77,18 +81,18 @@ body {
   font-size: 24pt;
   text-align: center;
   letter-spacing: 0.01em;
-  margin: 0 0 1.4em;
+  margin: 0 0 calc(1.4em * var(--space));
 }
 .markdown-body h1::after {
   content: "";
   display: block;
   width: 3em;
-  margin: 0.55em auto 0;
+  margin: calc(0.55em * var(--space)) auto 0;
   border-bottom: 1px solid var(--accent);
 }
 /* Any later h1 starts a new section with a bit more air. */
 .markdown-body h1:not(:first-child) {
-  margin-top: 2em;
+  margin-top: calc(2em * var(--space));
 }
 
 .markdown-body h2 {
@@ -96,13 +100,13 @@ body {
   font-variant: small-caps;
   letter-spacing: 0.08em;
   color: var(--accent);
-  margin: 1.8em 0 0.6em;
+  margin: calc(1.8em * var(--space)) 0 calc(0.6em * var(--space));
 }
 
 .markdown-body h3 {
   font-size: 12pt;
   font-style: italic;
-  margin: 1.4em 0 0.4em;
+  margin: calc(1.4em * var(--space)) 0 calc(0.4em * var(--space));
 }
 
 .markdown-body h4,
@@ -110,7 +114,7 @@ body {
 .markdown-body h6 {
   font-size: 11pt;
   font-weight: bold;
-  margin: 1.2em 0 0.3em;
+  margin: calc(1.2em * var(--space)) 0 calc(0.3em * var(--space));
 }
 
 /* Links */
@@ -127,15 +131,15 @@ body {
 
 .markdown-body ul,
 .markdown-body ol {
-  margin: 0 0 0.75em;
+  margin: 0 0 calc(0.75em * var(--space));
   padding-left: 1.6em;
 }
 .markdown-body li {
-  margin: 0.15em 0;
+  margin: calc(0.15em * var(--space)) 0;
 }
 .markdown-body li > ul,
 .markdown-body li > ol {
-  margin: 0.15em 0 0;
+  margin: calc(0.15em * var(--space)) 0 0;
 }
 .markdown-body li::marker {
   color: var(--muted);
@@ -152,7 +156,7 @@ body {
 /* Quotes */
 
 .markdown-body blockquote {
-  margin: 1.1em 2em;
+  margin: calc(1.1em * var(--space)) 2em;
   padding: 0 0 0 1em;
   border-left: 2px solid var(--rule);
   font-style: italic;
@@ -167,7 +171,7 @@ body {
 
 .markdown-body .markdown-alert {
   --callout: #3d5a78;
-  margin: 1.1em 0;
+  margin: calc(1.1em * var(--space)) 0;
   padding: 0.55em 1em 0.6em;
   border-left: 2px solid var(--callout);
   background: var(--paper);
@@ -189,7 +193,7 @@ body {
   --callout: var(--muted);
 }
 .markdown-body .markdown-alert-title {
-  margin-bottom: 0.3em;
+  margin-bottom: calc(0.3em * var(--space));
   color: var(--callout);
   font-variant: small-caps;
   font-weight: 600;
@@ -233,8 +237,8 @@ body {
   border: 1px solid #e8e1d4;
   border-radius: 4px;
   padding: 0.9em 1.1em;
-  margin: 0 0 1em;
-  line-height: 1.45;
+  margin: 0 0 calc(1em * var(--space));
+  line-height: calc(1 + 0.45 * var(--leading));
   white-space: pre-wrap;
   word-break: break-word;
   break-inside: avoid;
@@ -293,7 +297,7 @@ body {
 
 .markdown-body table {
   border-collapse: collapse;
-  margin: 1.2em auto;
+  margin: calc(1.2em * var(--space)) auto;
   border-top: 1.5px solid var(--text);
   border-bottom: 1.5px solid var(--text);
   font-variant-numeric: lining-nums tabular-nums;
@@ -318,7 +322,7 @@ body {
 .markdown-body hr {
   border: 0;
   text-align: center;
-  margin: 1.6em 0;
+  margin: calc(1.6em * var(--space)) 0;
 }
 .markdown-body hr::after {
   content: "⁂";
@@ -329,7 +333,7 @@ body {
 .markdown-body img {
   display: block;
   max-width: 100%;
-  margin: 1em auto;
+  margin: calc(1em * var(--space)) auto;
   break-inside: avoid;
 }
 
@@ -339,7 +343,7 @@ body {
   display: none;
 }
 .markdown-body .footnotes {
-  margin-top: 2.5em;
+  margin-top: calc(2.5em * var(--space));
   font-size: 9pt;
   color: var(--muted);
 }
@@ -348,7 +352,7 @@ body {
   display: block;
   width: 30%;
   border-top: 0.75px solid var(--rule);
-  margin-bottom: 0.8em;
+  margin-bottom: calc(0.8em * var(--space));
 }
 .markdown-body .footnotes ol {
   padding-left: 1.2em;

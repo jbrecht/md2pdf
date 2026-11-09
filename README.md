@@ -78,6 +78,8 @@ Styles are registered in the `STYLES` map in `bin/md2pdf.js`; each is a list of 
 
 The text of the document's first `#` heading (empty if there is none) is available to page margin boxes as `var(--document-title)`, e.g. `@top-left { content: var(--document-title); }`, as the `report` style does.
 
+Every style's spacing scales with two variables declared on `:root`, both 1 as designed: `--leading` scales each line height's excess over 1 (`line-height: calc(1 + 0.55 * var(--leading))`) and `--space` the vertical gaps between blocks (`margin: calc(1.8em * var(--space)) 0 …`). A new style should do the same; `npm test` checks it. To tighten a document, override them, e.g. `--css` with `:root { --leading: 0.8; --space: 0.75; }`. Page margins aren't included: they stay in each style's `@page` rule.
+
 # Using the renderer
 
 The Markdown renderer and the print styles can be installed straight from GitHub:

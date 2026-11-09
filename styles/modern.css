@@ -1,6 +1,10 @@
 /* Modern: clean sans-serif type, generous whitespace and one accent color. */
 
 :root {
+  /* Spacing scales, 1 as designed: --leading scales each line height's excess over 1,
+     --space the vertical gaps between blocks. */
+  --leading: 1;
+  --space: 1;
   --text: #1d2433;
   --muted: #5c6577;
   --faint: #e3e7ef;
@@ -41,14 +45,14 @@ body {
 .markdown-body {
   font-family: var(--sans);
   font-size: 10.5pt;
-  line-height: 1.65;
+  line-height: calc(1 + 0.65 * var(--leading));
   color: var(--text);
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
 .markdown-body p {
-  margin: 0 0 1em;
+  margin: 0 0 calc(1em * var(--space));
   orphans: 3;
   widows: 3;
 }
@@ -63,7 +67,7 @@ body {
 .markdown-body h6 {
   font-family: var(--sans);
   font-weight: 600;
-  line-height: 1.25;
+  line-height: calc(1 + 0.25 * var(--leading));
   letter-spacing: -0.01em;
   break-after: avoid;
 }
@@ -72,35 +76,35 @@ body {
   font-size: 26pt;
   font-weight: 700;
   letter-spacing: -0.02em;
-  margin: 0 0 0.9em;
+  margin: 0 0 calc(0.9em * var(--space));
 }
 .markdown-body h1:not(:first-child) {
-  margin-top: 1.6em;
+  margin-top: calc(1.6em * var(--space));
 }
 
 /* A short accent bar above each section heading. */
 .markdown-body h2 {
   font-size: 16pt;
-  margin: 2em 0 0.7em;
+  margin: calc(2em * var(--space)) 0 calc(0.7em * var(--space));
 }
 .markdown-body h2::before {
   content: "";
   display: block;
   width: 2.2em;
-  margin-bottom: 0.6em;
+  margin-bottom: calc(0.6em * var(--space));
   border-top: 3px solid var(--accent);
 }
 
 .markdown-body h3 {
   font-size: 12.5pt;
   color: var(--accent);
-  margin: 1.6em 0 0.5em;
+  margin: calc(1.6em * var(--space)) 0 calc(0.5em * var(--space));
 }
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
   font-size: 10.5pt;
-  margin: 1.4em 0 0.4em;
+  margin: calc(1.4em * var(--space)) 0 calc(0.4em * var(--space));
 }
 .markdown-body h5,
 .markdown-body h6 {
@@ -121,15 +125,15 @@ body {
 
 .markdown-body ul,
 .markdown-body ol {
-  margin: 0 0 1em;
+  margin: 0 0 calc(1em * var(--space));
   padding-left: 1.5em;
 }
 .markdown-body li {
-  margin: 0.3em 0;
+  margin: calc(0.3em * var(--space)) 0;
 }
 .markdown-body li > ul,
 .markdown-body li > ol {
-  margin: 0.3em 0 0;
+  margin: calc(0.3em * var(--space)) 0 0;
 }
 .markdown-body li::marker {
   color: var(--accent);
@@ -146,7 +150,7 @@ body {
 /* Quotes */
 
 .markdown-body blockquote {
-  margin: 1.4em 0;
+  margin: calc(1.4em * var(--space)) 0;
   padding: 0.1em 0 0.1em 1.2em;
   border-left: 3px solid var(--accent);
   color: var(--muted);
@@ -161,7 +165,7 @@ body {
 
 .markdown-body .markdown-alert {
   --callout: var(--accent);
-  margin: 1.4em 0;
+  margin: calc(1.4em * var(--space)) 0;
   padding: 0.8em 1.1em;
   border-left: 3px solid var(--callout);
   border-radius: 0 8px 8px 0;
@@ -184,7 +188,7 @@ body {
   --callout: var(--muted);
 }
 .markdown-body .markdown-alert-title {
-  margin-bottom: 0.4em;
+  margin-bottom: calc(0.4em * var(--space));
   color: var(--callout);
   font-weight: 600;
 }
@@ -218,11 +222,11 @@ body {
   border-radius: 4px;
 }
 .markdown-body pre {
-  margin: 0 0 1.2em;
+  margin: 0 0 calc(1.2em * var(--space));
   padding: 1em 1.2em;
   background: var(--tint);
   border-radius: 8px;
-  line-height: 1.5;
+  line-height: calc(1 + 0.5 * var(--leading));
   white-space: pre-wrap;
   word-break: break-word;
   break-inside: avoid;
@@ -283,7 +287,7 @@ body {
 .markdown-body table {
   width: 100%;
   border-collapse: collapse;
-  margin: 1.4em 0;
+  margin: calc(1.4em * var(--space)) 0;
   font-size: 9.5pt;
   font-variant-numeric: tabular-nums;
 }
@@ -308,7 +312,7 @@ body {
 /* Rules, images and diagrams */
 
 .markdown-body hr {
-  margin: 2.2em 0;
+  margin: calc(2.2em * var(--space)) 0;
   border: 0;
   border-top: 1px solid var(--faint);
 }
@@ -316,13 +320,13 @@ body {
 .markdown-body img {
   display: block;
   max-width: 100%;
-  margin: 1.4em auto;
+  margin: calc(1.4em * var(--space)) auto;
   border-radius: 6px;
   break-inside: avoid;
 }
 
 .markdown-body .mermaid-diagram {
-  margin: 1.6em 0;
+  margin: calc(1.6em * var(--space)) 0;
 }
 
 /* Footnotes */
@@ -331,7 +335,7 @@ body {
   display: none;
 }
 .markdown-body .footnotes {
-  margin-top: 3em;
+  margin-top: calc(3em * var(--space));
   padding-top: 1em;
   border-top: 1px solid var(--faint);
   font-size: 8.5pt;
@@ -341,7 +345,7 @@ body {
   padding-left: 1.3em;
 }
 .markdown-body .footnotes li {
-  margin: 0.2em 0;
+  margin: calc(0.2em * var(--space)) 0;
 }
 .markdown-body .footnotes p {
   margin: 0;
