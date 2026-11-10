@@ -1,0 +1,19 @@
+/* Résumé: the print-only rules (page margins, running headers and page numbers). Load after
+   ../resume.css when printing; a page that only shows the document on screen leaves this out. */
+
+@page {
+  margin: 0.6in 0.7in;
+  /* Empty boxes stop browsers from adding their own date/title header and URL footer. */
+  @top-center {
+    content: "";
+  }
+  @bottom-center {
+    content: "";
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}

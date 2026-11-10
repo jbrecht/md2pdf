@@ -1,0 +1,27 @@
+/* Classic: the print-only rules (page margins, running headers and page numbers). Load after
+   ../classic.css when printing; a page that only shows the document on screen leaves this out. */
+
+@page {
+  margin: 1in 1.1in 0.9in;
+  /* An empty top box stops browsers from adding their own date/title header. */
+  @top-center {
+    content: "";
+  }
+  @bottom-center {
+    content: counter(page);
+    font-family: "Iowan Old Style", Charter, Palatino, Georgia, serif;
+    font-size: 9pt;
+    color: #6b645b;
+  }
+}
+@page :first {
+  @bottom-center {
+    content: "";
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}

@@ -15,19 +15,17 @@ import { buildDocument, createRenderer, titleOf } from '../lib/render.js';
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-// Each style is a list of CSS files inlined into the page, in order.
-// To add a style, drop a CSS file in styles/ and register it here; set-style.sh picks it up.
+// Each style is a list of CSS files inlined into the page, in order: its on-screen styles, then its
+// print rules. To add a style, add both files, register it here and add its page margin to lib/styles.js;
+// set-style.sh picks it up.
+const styleFiles = (name, ...before) => [...before, join(ROOT, 'styles', `${name}.css`), join(ROOT, 'styles', 'print', `${name}.css`)];
 const STYLES = {
-  github: [
-    require.resolve('github-markdown-css/github-markdown-light.css'),
-    require.resolve('highlight.js/styles/github.css'),
-    join(ROOT, 'styles', 'github.css'),
-  ],
-  classic: [join(ROOT, 'styles', 'classic.css')],
-  academic: [join(ROOT, 'styles', 'academic.css')],
-  modern: [join(ROOT, 'styles', 'modern.css')],
-  report: [join(ROOT, 'styles', 'report.css')],
-  resume: [join(ROOT, 'styles', 'resume.css')],
+  github: styleFiles('github', require.resolve('github-markdown-css/github-markdown-light.css')),
+  classic: styleFiles('classic'),
+  academic: styleFiles('academic'),
+  modern: styleFiles('modern'),
+  report: styleFiles('report'),
+  resume: styleFiles('resume'),
 };
 const FALLBACK_STYLE = 'github';
 

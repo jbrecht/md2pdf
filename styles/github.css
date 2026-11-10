@@ -1,42 +1,171 @@
-/* Print adjustments layered on top of github-markdown-css. */
+/* GitHub: GitHub's Markdown look, layered on top of github-markdown-css, with highlight.js's GitHub theme. */
 
-@page {
-  margin: 0.75in 0.7in;
-  /* Empty margin boxes stop browsers from adding their own date/URL headers and footers
-     when printing from the website. */
-  @top-center {
-    content: "";
-  }
-  @bottom-center {
-    content: "";
-  }
+/* Variables a page can override, on .markdown-body itself: for all its documents, or for one with
+   <article class="markdown-body" style="--md2pdf-font-size: 12pt">. A value set on :root or another
+   ancestor doesn't reach the document. :where() gives these defaults no specificity, so the page's
+   rule wins wherever it comes. Every style uses the same names. */
+:where(.markdown-body) {
+  /* Size and spacing. --md2pdf-font-size is the body text size, an absolute length such as 11pt or 15px; headings and smaller text scale with
+     it. --md2pdf-leading scales each line height's excess over 1, and --md2pdf-space the vertical
+     gaps between blocks; both are 1 as designed. */
+  --md2pdf-font-size: 11pt;
+  --md2pdf-leading: 1;
+  --md2pdf-space: 1;
+  /* Colors: --md2pdf-background the document's background; --md2pdf-text body text; --md2pdf-muted
+     quotes, footnotes and secondary text; --md2pdf-accent links. */
+  --md2pdf-background: #fff;
+  --md2pdf-text: #1f2328;
+  --md2pdf-muted: #59636e;
+  --md2pdf-accent: #0969da;
+  /* Fonts: --md2pdf-font body text, --md2pdf-heading-font headings (the body font unless set),
+     --md2pdf-code-font code. */
+  --md2pdf-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --md2pdf-heading-font: var(--md2pdf-font);
+  --md2pdf-code-font: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
 }
 
-html,
-body {
-  margin: 0;
-  background: #fff;
+/* highlight.js's GitHub theme, limited to the document. From highlight.js 11.12.0.
+   On .hljs itself, :where() keeps each selector's specificity what it is in the theme, so the rules
+   below still override it. The token rules take .markdown-body's specificity, to outrank a theme on
+   the host page.
+
+   BSD 3-Clause License
+
+   Copyright (c) 2006, Ivan Sagalaev.
+   All rights reserved.
+
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions are met:
+
+   * Redistributions of source code must retain the above copyright notice, this
+     list of conditions and the following disclaimer.
+
+   * Redistributions in binary form must reproduce the above copyright notice,
+     this list of conditions and the following disclaimer in the documentation
+     and/or other materials provided with the distribution.
+
+   * Neither the name of the copyright holder nor the names of its
+     contributors may be used to endorse or promote products derived from
+     this software without specific prior written permission.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+   DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+   FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+   CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+   OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
+:where(.markdown-body) pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 1em;
+}
+:where(.markdown-body) code.hljs {
+  padding: 3px 5px;
+}
+:where(.markdown-body) .hljs {
+  color: #24292e;
+  background: #ffffff;
+}
+/* A highlight.js theme on the host page styles .hljs and its tokens too. This outranks a theme's token
+   rules, and the token colors below come after it. */
+.markdown-body [class*="hljs-"] {
+  color: inherit;
+  background: none;
+  font-style: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+.markdown-body .hljs-doctag,
+.markdown-body .hljs-keyword,
+.markdown-body .hljs-meta .hljs-keyword,
+.markdown-body .hljs-template-tag,
+.markdown-body .hljs-template-variable,
+.markdown-body .hljs-type,
+.markdown-body .hljs-variable.language_ {
+  color: #d73a49;
+}
+.markdown-body .hljs-title,
+.markdown-body .hljs-title.class_,
+.markdown-body .hljs-title.class_.inherited__,
+.markdown-body .hljs-title.function_ {
+  color: #6f42c1;
+}
+.markdown-body .hljs-attr,
+.markdown-body .hljs-attribute,
+.markdown-body .hljs-literal,
+.markdown-body .hljs-meta,
+.markdown-body .hljs-number,
+.markdown-body .hljs-operator,
+.markdown-body .hljs-variable,
+.markdown-body .hljs-selector-attr,
+.markdown-body .hljs-selector-class,
+.markdown-body .hljs-selector-id {
+  color: #005cc5;
+}
+.markdown-body .hljs-regexp,
+.markdown-body .hljs-string,
+.markdown-body .hljs-meta .hljs-string {
+  color: #032f62;
+}
+.markdown-body .hljs-built_in,
+.markdown-body .hljs-symbol {
+  color: #e36209;
+}
+.markdown-body .hljs-comment,
+.markdown-body .hljs-code,
+.markdown-body .hljs-formula {
+  color: #6a737d;
+}
+.markdown-body .hljs-name,
+.markdown-body .hljs-quote,
+.markdown-body .hljs-selector-tag,
+.markdown-body .hljs-selector-pseudo {
+  color: #22863a;
+}
+.markdown-body .hljs-subst {
+  color: #24292e;
+}
+.markdown-body .hljs-section {
+  color: #005cc5;
+  font-weight: bold;
+}
+.markdown-body .hljs-bullet {
+  color: #735c0f;
+}
+.markdown-body .hljs-emphasis {
+  color: #24292e;
+  font-style: italic;
+}
+.markdown-body .hljs-strong {
+  color: #24292e;
+  font-weight: bold;
+}
+.markdown-body .hljs-addition {
+  color: #22863a;
+  background-color: #f0fff4;
+}
+.markdown-body .hljs-deletion {
+  color: #b31d28;
+  background-color: #ffeef0;
 }
 
 .markdown-body {
   box-sizing: border-box;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  font-size: 11pt;
+  font-family: var(--md2pdf-font);
+  font-size: var(--md2pdf-font-size);
+  color: var(--md2pdf-text);
+  background-color: var(--md2pdf-background);
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
-/* Spacing scales, 1 as designed: --leading scales each line height's excess over 1, --space the
-   vertical gaps between blocks. github-markdown-css sets these in px and rem, so they're restated
-   here with the variables applied. */
-:root {
-  --leading: 1;
-  --space: 1;
-}
-.markdown-body {
-  line-height: calc(1 + 0.5 * var(--leading));
+/* github-markdown-css sets these colors and fonts directly, so they're restated with the variables. */
+.markdown-body a {
+  color: var(--md2pdf-accent);
 }
 .markdown-body h1,
 .markdown-body h2,
@@ -44,9 +173,36 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  margin-top: calc(1.5rem * var(--space));
-  margin-bottom: calc(1rem * var(--space));
-  line-height: calc(1 + 0.25 * var(--leading));
+  font-family: var(--md2pdf-heading-font);
+}
+.markdown-body h6,
+.markdown-body blockquote,
+.markdown-body .footnotes {
+  color: var(--md2pdf-muted);
+}
+.markdown-body tt,
+.markdown-body code,
+.markdown-body kbd,
+.markdown-body pre,
+.markdown-body samp {
+  font-family: var(--md2pdf-code-font);
+}
+
+/* github-markdown-css sets line heights in px and gaps in rem (12pt here), so they're restated with the
+   spacing variables applied, and the gaps as multiples of the text size so they follow it rather than
+   the page's root font size. */
+.markdown-body {
+  line-height: calc(1 + 0.5 * var(--md2pdf-leading));
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin-top: calc(18 / 11 * var(--md2pdf-font-size) * var(--md2pdf-space));
+  margin-bottom: calc(12 / 11 * var(--md2pdf-font-size) * var(--md2pdf-space));
+  line-height: calc(1 + 0.25 * var(--md2pdf-leading));
 }
 .markdown-body p,
 .markdown-body blockquote,
@@ -57,22 +213,22 @@ body {
 .markdown-body pre,
 .markdown-body details,
 .markdown-body .markdown-alert {
-  margin-bottom: calc(1rem * var(--space));
+  margin-bottom: calc(12 / 11 * var(--md2pdf-font-size) * var(--md2pdf-space));
 }
 .markdown-body li > p {
-  margin-top: calc(1rem * var(--space));
+  margin-top: calc(12 / 11 * var(--md2pdf-font-size) * var(--md2pdf-space));
 }
 .markdown-body li + li {
-  margin-top: calc(0.25em * var(--space));
+  margin-top: calc(0.25em * var(--md2pdf-space));
 }
 .markdown-body .task-list-item + .task-list-item {
-  margin-top: calc(0.25rem * var(--space));
+  margin-top: calc(3 / 11 * var(--md2pdf-font-size) * var(--md2pdf-space));
 }
 .markdown-body hr {
-  margin: calc(1.5rem * var(--space)) 0;
+  margin: calc(18 / 11 * var(--md2pdf-font-size) * var(--md2pdf-space)) 0;
 }
 .markdown-body pre {
-  line-height: calc(1 + 0.45 * var(--leading));
+  line-height: calc(1 + 0.45 * var(--md2pdf-leading));
 }
 
 /* Wrap long code lines instead of clipping them at the page edge. */
@@ -126,19 +282,27 @@ body {
   line-height: inherit;
 }
 .markdown-body .markdown-alert-title .octicon {
-  margin-right: 0.5rem;
+  margin-right: calc(6 / 11 * var(--md2pdf-font-size));
 }
 .markdown-body .markdown-alert.markdown-alert-quote {
-  border-left-color: #59636e;
+  border-left-color: var(--md2pdf-muted);
 }
 .markdown-body .markdown-alert.markdown-alert-quote .markdown-alert-title {
-  color: #59636e;
+  color: var(--md2pdf-muted);
 }
 
-/* highlight.js's theme adds its own padding and background; GitHub's <pre> already has them. */
+/* highlight.js's theme, or one on the host page, adds its own box; GitHub's <pre> already has one. */
 .markdown-body pre code.hljs {
+  display: block;
+  overflow: visible;
   padding: 0;
+  color: #24292e;
   background: transparent;
+}
+
+/* github-markdown-css paints table rows white. */
+.markdown-body table tr {
+  background-color: var(--md2pdf-background);
 }
 
 /* GitHub's footnotes section has its own top border; drop the plugin's extra <hr>. */
@@ -148,7 +312,7 @@ body {
 
 /* An Obsidian embed (![[Other note]]) that can't be shown: a muted placeholder. */
 .markdown-body .markdown-embed {
-  color: #59636e;
+  color: var(--md2pdf-muted);
   font-style: italic;
 }
 
