@@ -1,0 +1,22 @@
+/* Academic: the print-only rules (page margins, running headers and page numbers). Load after
+   ../academic.css when printing; a page that only shows the document on screen leaves this out. */
+
+@page {
+  margin: 1in 1.15in;
+  /* An empty top box stops browsers from adding their own date/title header. */
+  @top-center {
+    content: "";
+  }
+  @bottom-center {
+    content: counter(page);
+    font-family: Palatino, "Palatino Linotype", "Book Antiqua", "URW Palladio L", "TeX Gyre Pagella", Georgia, serif;
+    font-size: 10pt;
+    color: #111;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}

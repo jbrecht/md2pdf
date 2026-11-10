@@ -1,87 +1,45 @@
 /* Report: a title block from the first heading, a running header with the title, "Page N of M" footers
    and sober ruled tables. Serif text with sans-serif headings. */
 
-:root {
-  /* Spacing scales, 1 as designed: --leading scales each line height's excess over 1,
-     --space the vertical gaps between blocks. */
-  --leading: 1;
-  --space: 1;
-  --text: #1c2129;
-  --muted: #5f6b7a;
-  --accent: #1f3a5f;
-  --rule: #b9c3cf;
-  --shade: #edf1f5;
-  --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
-  --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --mono: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  /* The document's first heading, for the running header; set by the renderer or the page showing it. */
-  --document-title: "";
-}
-
-@page {
-  margin: 1in 1in 0.9in;
-  @top-left {
-    content: var(--document-title);
-    vertical-align: bottom;
-    margin-bottom: 18pt;
-    padding-bottom: 6pt;
-    border-bottom: 0.75pt solid #b9c3cf;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 8pt;
-    color: #5f6b7a;
-  }
-  /* Empty boxes carry the header rule across the page and stop browsers adding their own header. */
-  @top-center {
-    content: "";
-    margin-bottom: 18pt;
-    border-bottom: 0.75pt solid #b9c3cf;
-  }
-  @top-right {
-    content: "";
-    margin-bottom: 18pt;
-    border-bottom: 0.75pt solid #b9c3cf;
-  }
-  @bottom-center {
-    content: "";
-  }
-  @bottom-right {
-    content: "Page " counter(page) " of " counter(pages);
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 8pt;
-    color: #5f6b7a;
-  }
-}
-/* The title block replaces the header on the first page. */
-@page :first {
-  @top-left {
-    content: "";
-    border: 0;
-  }
-  @top-center {
-    border: 0;
-  }
-  @top-right {
-    border: 0;
-  }
-}
-
-html,
-body {
-  margin: 0;
-  background: #fff;
+/* Variables a page can override, on .markdown-body itself: for all its documents, or for one with
+   <article class="markdown-body" style="--md2pdf-font-size: 12pt">. A value set on :root or another
+   ancestor doesn't reach the document. :where() gives these defaults no specificity, so the page's
+   rule wins wherever it comes. Every style uses the same names. */
+:where(.markdown-body) {
+  /* Size and spacing. --md2pdf-font-size is the body text size, an absolute length such as 11pt or 15px; headings and smaller text scale with
+     it. --md2pdf-leading scales each line height's excess over 1, and --md2pdf-space the vertical
+     gaps between blocks; both are 1 as designed. */
+  --md2pdf-font-size: 10.5pt;
+  --md2pdf-leading: 1;
+  --md2pdf-space: 1;
+  /* Colors: --md2pdf-background the document's background; --md2pdf-text body text; --md2pdf-muted
+     secondary text; --md2pdf-accent headings, links, quotes and table headings; --md2pdf-rule rules
+     and table lines; --md2pdf-surface inline code, quote and table-heading backgrounds. */
+  --md2pdf-background: #fff;
+  --md2pdf-text: #1c2129;
+  --md2pdf-muted: #5f6b7a;
+  --md2pdf-accent: #1f3a5f;
+  --md2pdf-rule: #b9c3cf;
+  --md2pdf-surface: #edf1f5;
+  /* Fonts: --md2pdf-font body text, --md2pdf-heading-font headings, callout titles and tables,
+     --md2pdf-code-font code. */
+  --md2pdf-font: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+  --md2pdf-heading-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --md2pdf-code-font: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 .markdown-body {
-  font-family: var(--serif);
-  font-size: 10.5pt;
-  line-height: calc(1 + 0.5 * var(--leading));
-  color: var(--text);
+  font-family: var(--md2pdf-font);
+  background: var(--md2pdf-background);
+  font-size: var(--md2pdf-font-size);
+  line-height: calc(1 + 0.5 * var(--md2pdf-leading));
+  color: var(--md2pdf-text);
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
 .markdown-body p {
-  margin: 0 0 calc(0.8em * var(--space));
+  margin: 0 0 calc(0.8em * var(--md2pdf-space));
   orphans: 3;
   widows: 3;
 }
@@ -94,49 +52,49 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  font-family: var(--sans);
+  font-family: var(--md2pdf-heading-font);
   font-weight: bold;
-  line-height: calc(1 + 0.25 * var(--leading));
-  color: var(--accent);
+  line-height: calc(1 + 0.25 * var(--md2pdf-leading));
+  color: var(--md2pdf-accent);
   break-after: avoid;
 }
 
 /* The first heading is the report's title block. */
 .markdown-body h1:first-child {
-  font-size: 24pt;
+  font-size: calc(24 / 10.5 * var(--md2pdf-font-size));
   letter-spacing: -0.01em;
-  margin: 0 0 calc(1.6em * var(--space));
+  margin: 0 0 calc(1.6em * var(--md2pdf-space));
   padding: 0.6em 0 0.5em;
-  border-top: 6pt solid var(--accent);
-  border-bottom: 0.75pt solid var(--rule);
+  border-top: 6pt solid var(--md2pdf-accent);
+  border-bottom: 0.75pt solid var(--md2pdf-rule);
 }
 .markdown-body h1 {
-  font-size: 18pt;
-  margin: calc(1.8em * var(--space)) 0 calc(0.7em * var(--space));
+  font-size: calc(18 / 10.5 * var(--md2pdf-font-size));
+  margin: calc(1.8em * var(--md2pdf-space)) 0 calc(0.7em * var(--md2pdf-space));
 }
 
 .markdown-body h2 {
-  font-size: 13.5pt;
-  margin: calc(1.8em * var(--space)) 0 calc(0.6em * var(--space));
+  font-size: calc(13.5 / 10.5 * var(--md2pdf-font-size));
+  margin: calc(1.8em * var(--md2pdf-space)) 0 calc(0.6em * var(--md2pdf-space));
   padding-bottom: 0.25em;
-  border-bottom: 0.75pt solid var(--rule);
+  border-bottom: 0.75pt solid var(--md2pdf-rule);
 }
 .markdown-body h3 {
-  font-size: 11.5pt;
-  margin: calc(1.4em * var(--space)) 0 calc(0.4em * var(--space));
+  font-size: calc(11.5 / 10.5 * var(--md2pdf-font-size));
+  margin: calc(1.4em * var(--md2pdf-space)) 0 calc(0.4em * var(--md2pdf-space));
 }
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  font-size: 10.5pt;
-  color: var(--text);
-  margin: calc(1.2em * var(--space)) 0 calc(0.3em * var(--space));
+  font-size: var(--md2pdf-font-size);
+  color: var(--md2pdf-text);
+  margin: calc(1.2em * var(--md2pdf-space)) 0 calc(0.3em * var(--md2pdf-space));
 }
 
 /* Links */
 
 .markdown-body a {
-  color: var(--accent);
+  color: var(--md2pdf-accent);
   text-decoration: underline;
   text-decoration-thickness: 0.5pt;
   text-underline-offset: 2pt;
@@ -152,15 +110,15 @@ body {
 
 .markdown-body ul,
 .markdown-body ol {
-  margin: 0 0 calc(0.8em * var(--space));
+  margin: 0 0 calc(0.8em * var(--md2pdf-space));
   padding-left: 1.6em;
 }
 .markdown-body li {
-  margin: calc(0.2em * var(--space)) 0;
+  margin: calc(0.2em * var(--md2pdf-space)) 0;
 }
 .markdown-body li > ul,
 .markdown-body li > ol {
-  margin: calc(0.2em * var(--space)) 0 0;
+  margin: calc(0.2em * var(--md2pdf-space)) 0 0;
 }
 .markdown-body .task-list-item {
   list-style-type: none;
@@ -168,16 +126,16 @@ body {
 .markdown-body .task-list-item input {
   margin: 0 0.4em 0.2em -1.4em;
   vertical-align: middle;
-  accent-color: var(--accent);
+  accent-color: var(--md2pdf-accent);
 }
 
 /* Quotes: a shaded callout. */
 
 .markdown-body blockquote {
-  margin: calc(1em * var(--space)) 0;
+  margin: calc(1em * var(--md2pdf-space)) 0;
   padding: 0.7em 1em;
-  background: var(--shade);
-  border-left: 3pt solid var(--accent);
+  background: var(--md2pdf-surface);
+  border-left: 3pt solid var(--md2pdf-accent);
   break-inside: avoid;
 }
 .markdown-body blockquote p:last-child {
@@ -187,32 +145,32 @@ body {
 /* Callouts (GitHub alerts and Obsidian callouts): shaded like quotes, in the callout's color. */
 
 .markdown-body .markdown-alert {
-  --callout: #2b5c9e;
-  margin: calc(1em * var(--space)) 0;
+  --md2pdf-callout: #2b5c9e;
+  margin: calc(1em * var(--md2pdf-space)) 0;
   padding: 0.7em 1em;
-  border-left: 3pt solid var(--callout);
-  background: color-mix(in srgb, var(--callout) 8%, #fff);
+  border-left: 3pt solid var(--md2pdf-callout);
+  background: color-mix(in srgb, var(--md2pdf-callout) 8%, var(--md2pdf-background));
   break-inside: avoid;
 }
 .markdown-body .markdown-alert-tip {
-  --callout: #2e6b3f;
+  --md2pdf-callout: #2e6b3f;
 }
 .markdown-body .markdown-alert-important {
-  --callout: #5b3f8c;
+  --md2pdf-callout: #5b3f8c;
 }
 .markdown-body .markdown-alert-warning {
-  --callout: #94600c;
+  --md2pdf-callout: #94600c;
 }
 .markdown-body .markdown-alert-caution {
-  --callout: #a32a2a;
+  --md2pdf-callout: #a32a2a;
 }
 .markdown-body .markdown-alert-quote {
-  --callout: var(--muted);
+  --md2pdf-callout: var(--md2pdf-muted);
 }
 .markdown-body .markdown-alert-title {
-  margin-bottom: calc(0.4em * var(--space));
-  color: var(--callout);
-  font-family: var(--sans);
+  margin-bottom: calc(0.4em * var(--md2pdf-space));
+  color: var(--md2pdf-callout);
+  font-family: var(--md2pdf-heading-font);
   font-size: 0.8em;
   font-weight: bold;
   letter-spacing: 0.06em;
@@ -233,77 +191,93 @@ body {
 
 .markdown-body code,
 .markdown-body kbd {
-  font-family: var(--mono);
+  font-family: var(--md2pdf-code-font);
   font-size: 0.85em;
 }
 .markdown-body :not(pre) > code {
-  background: var(--shade);
+  background: var(--md2pdf-surface);
   padding: 0.1em 0.3em;
   border-radius: 2px;
 }
 .markdown-body kbd {
   padding: 0.05em 0.35em;
-  border: 0.75pt solid var(--rule);
+  border: 0.75pt solid var(--md2pdf-rule);
   border-bottom-width: 1.5pt;
   border-radius: 2px;
 }
 .markdown-body pre {
-  margin: 0 0 calc(1em * var(--space));
+  margin: 0 0 calc(1em * var(--md2pdf-space));
   padding: 0.8em 1em;
   background: #f6f8fa;
-  border: 0.75pt solid var(--rule);
-  line-height: calc(1 + 0.45 * var(--leading));
+  border: 0.75pt solid var(--md2pdf-rule);
+  line-height: calc(1 + 0.45 * var(--md2pdf-leading));
   white-space: pre-wrap;
   word-break: break-word;
   break-inside: avoid;
 }
 .markdown-body pre code {
-  font-size: 8.5pt;
+  font-size: calc(8.5 / 10.5 * var(--md2pdf-font-size));
+}
+/* A highlight.js theme on the host page styles .hljs too; keep code blocks this style's own. */
+.markdown-body pre code.hljs {
+  display: inline;
+  overflow: visible;
+  padding: 0;
+  color: inherit;
+  background: none;
+}
+/* And its tokens: this outranks a theme's token rules, and this style's colors come after it. */
+.markdown-body [class*="hljs-"] {
+  color: inherit;
+  background: none;
+  font-style: inherit;
+  font-weight: inherit;
+  text-decoration: none;
 }
 
-.hljs-comment,
-.hljs-quote {
+.markdown-body .hljs-comment,
+.markdown-body .hljs-quote {
   color: #6a7686;
   font-style: italic;
 }
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-literal,
-.hljs-doctag {
+.markdown-body .hljs-keyword,
+.markdown-body .hljs-selector-tag,
+.markdown-body .hljs-literal,
+.markdown-body .hljs-doctag {
   color: #1f3a5f;
   font-weight: bold;
 }
-.hljs-string,
-.hljs-regexp,
-.hljs-addition {
+.markdown-body .hljs-string,
+.markdown-body .hljs-regexp,
+.markdown-body .hljs-addition {
   color: #2f6b3b;
 }
-.hljs-number,
-.hljs-symbol,
-.hljs-bullet {
+.markdown-body .hljs-number,
+.markdown-body .hljs-symbol,
+.markdown-body .hljs-bullet {
   color: #9a4a12;
 }
-.hljs-title,
-.hljs-section,
-.hljs-name {
+.markdown-body .hljs-title,
+.markdown-body .hljs-section,
+.markdown-body .hljs-name {
   color: #0f5f8a;
 }
-.hljs-built_in,
-.hljs-type,
-.hljs-attr,
-.hljs-attribute,
-.hljs-variable,
-.hljs-template-variable {
+.markdown-body .hljs-built_in,
+.markdown-body .hljs-type,
+.markdown-body .hljs-attr,
+.markdown-body .hljs-attribute,
+.markdown-body .hljs-variable,
+.markdown-body .hljs-template-variable {
   color: #6a3d8a;
 }
-.hljs-meta,
-.hljs-deletion {
+.markdown-body .hljs-meta,
+.markdown-body .hljs-deletion {
   color: #a3271f;
 }
-.hljs-emphasis {
+.markdown-body .hljs-emphasis {
   font-style: italic;
 }
-.hljs-strong {
+.markdown-body .hljs-strong {
   font-weight: bold;
 }
 
@@ -312,20 +286,20 @@ body {
 .markdown-body table {
   width: 100%;
   border-collapse: collapse;
-  margin: calc(1em * var(--space)) 0 calc(1.2em * var(--space));
-  font-family: var(--sans);
-  font-size: 9pt;
+  margin: calc(1em * var(--md2pdf-space)) 0 calc(1.2em * var(--md2pdf-space));
+  font-family: var(--md2pdf-heading-font);
+  font-size: calc(9 / 10.5 * var(--md2pdf-font-size));
   font-variant-numeric: tabular-nums;
 }
 .markdown-body th,
 .markdown-body td {
   padding: 0.45em 0.7em;
   text-align: left;
-  border: 0.75pt solid var(--rule);
+  border: 0.75pt solid var(--md2pdf-rule);
 }
 .markdown-body th {
-  background: var(--shade);
-  color: var(--accent);
+  background: var(--md2pdf-surface);
+  color: var(--md2pdf-accent);
   font-weight: bold;
 }
 .markdown-body tr {
@@ -335,15 +309,15 @@ body {
 /* Rules, images and diagrams */
 
 .markdown-body hr {
-  margin: calc(1.6em * var(--space)) 0;
+  margin: calc(1.6em * var(--md2pdf-space)) 0;
   border: 0;
-  border-top: 0.75pt solid var(--rule);
+  border-top: 0.75pt solid var(--md2pdf-rule);
 }
 
 .markdown-body img {
   display: block;
   max-width: 100%;
-  margin: calc(1em * var(--space)) auto;
+  margin: calc(1em * var(--md2pdf-space)) auto;
   break-inside: avoid;
 }
 
@@ -353,22 +327,22 @@ body {
   display: none;
 }
 .markdown-body .footnotes {
-  margin-top: calc(2.4em * var(--space));
+  margin-top: calc(2.4em * var(--md2pdf-space));
   padding-top: 0.8em;
-  border-top: 0.75pt solid var(--rule);
-  font-size: 8.5pt;
-  color: var(--muted);
+  border-top: 0.75pt solid var(--md2pdf-rule);
+  font-size: calc(8.5 / 10.5 * var(--md2pdf-font-size));
+  color: var(--md2pdf-muted);
 }
 .markdown-body .footnotes ol {
   padding-left: 1.3em;
 }
 .markdown-body .footnotes p {
-  margin: 0 0 calc(0.3em * var(--space));
+  margin: 0 0 calc(0.3em * var(--md2pdf-space));
 }
 
 /* An Obsidian embed (![[Other note]]) that can't be shown: a muted placeholder. */
 .markdown-body .markdown-embed {
-  color: var(--muted);
+  color: var(--md2pdf-muted);
   font-style: italic;
 }
 

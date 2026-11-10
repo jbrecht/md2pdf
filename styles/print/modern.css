@@ -1,0 +1,30 @@
+/* Modern: the print-only rules (page margins, running headers and page numbers). Load after
+   ../modern.css when printing; a page that only shows the document on screen leaves this out. */
+
+@page {
+  margin: 0.9in 1in;
+  /* Empty boxes stop browsers from adding their own date/title header and URL/page footer. */
+  @top-center {
+    content: "";
+  }
+  @bottom-center {
+    content: "";
+  }
+  @bottom-right {
+    content: counter(page);
+    font-family: "Avenir Next", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 8.5pt;
+    color: #5c6577;
+  }
+}
+@page :first {
+  @bottom-right {
+    content: "";
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}

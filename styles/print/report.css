@@ -1,0 +1,60 @@
+/* Report: the print-only rules (page margins, running headers and page numbers). Load after
+   ../report.css when printing; a page that only shows the document on screen leaves this out. */
+
+:root {
+  /* The document's first heading, for the running header; set by the renderer or the page showing it. */
+  --document-title: "";
+}
+
+@page {
+  margin: 1in 1in 0.9in;
+  @top-left {
+    content: var(--document-title);
+    vertical-align: bottom;
+    margin-bottom: 18pt;
+    padding-bottom: 6pt;
+    border-bottom: 0.75pt solid #b9c3cf;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 8pt;
+    color: #5f6b7a;
+  }
+  /* Empty boxes carry the header rule across the page and stop browsers adding their own header. */
+  @top-center {
+    content: "";
+    margin-bottom: 18pt;
+    border-bottom: 0.75pt solid #b9c3cf;
+  }
+  @top-right {
+    content: "";
+    margin-bottom: 18pt;
+    border-bottom: 0.75pt solid #b9c3cf;
+  }
+  @bottom-center {
+    content: "";
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 8pt;
+    color: #5f6b7a;
+  }
+}
+/* The title block replaces the header on the first page. */
+@page :first {
+  @top-left {
+    content: "";
+    border: 0;
+  }
+  @top-center {
+    border: 0;
+  }
+  @top-right {
+    border: 0;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}

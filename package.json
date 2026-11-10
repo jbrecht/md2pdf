@@ -1,6 +1,6 @@
 {
-  "name": "md2pdf",
-  "version": "1.5.0",
+  "name": "@threepenny/md2pdf",
+  "version": "2.0.0",
   "description": "Markdown to beautifully styled PDF: the renderer and macOS CLI behind md2pdf.me",
   "type": "module",
   "license": "MIT",
@@ -10,13 +10,13 @@
     "type": "git",
     "url": "git+https://github.com/jbrecht/md2pdf.git"
   },
-  "private": true,
   "bin": {
     "md2pdf": "bin/md2pdf.js"
   },
   "exports": {
     ".": "./lib/render.js",
     "./render": "./lib/render.js",
+    "./styles": "./lib/styles.js",
     "./styles/*": "./styles/*",
     "./package.json": "./package.json"
   },
@@ -25,8 +25,12 @@
     "lib",
     "styles"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "test": "node test/run.js"
+    "test": "node test/run.js",
+    "demo": "echo 'Open http://localhost:3900/demo/' && python3 -m http.server 3900 --bind 127.0.0.1"
   },
   "dependencies": {
     "github-markdown-css": "5.9.0",

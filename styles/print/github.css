@@ -1,0 +1,26 @@
+/* GitHub: the print-only rules (page margins). Load after ../github.css when printing; a page that
+   only shows the document on screen leaves this out. */
+
+@page {
+  margin: 0.75in 0.7in;
+  /* Empty margin boxes stop browsers from adding their own date/URL headers and footers
+     when printing from the website. */
+  @top-center {
+    content: "";
+  }
+  @bottom-center {
+    content: "";
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}
+
+.markdown-body {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
