@@ -46,7 +46,7 @@ md2pdf notes.md -o ~/out.pdf    # choose the output path
 md2pdf notes.md -p A4           # page size (default: Letter)
 md2pdf notes.md --open          # open the PDF when done
 md2pdf notes.md -s classic      # use a specific style
-md2pdf notes.md --css my.css    # layer extra CSS on top of the style
+md2pdf notes.md --css my.css    # layer extra CSS on top of the style (its url()s resolve against my.css)
 md2pdf notes.md --html          # also write the intermediate HTML (for tweaking CSS)
 ```
 
@@ -81,6 +81,15 @@ Styles are registered in the `STYLES` map in `bin/md2pdf.js`; each is a list of 
 
 Register it in `STYLES` and add its page margin to `pageMargins` in `lib/styles.js`, and it's available to `-s` and `set-style.sh`. Use `md2pdf --html` to get the intermediate HTML for tweaking in a browser. For one-off tweaks, `--css` is enough.
 
+A style can bundle fonts, so it looks the same on every computer:
+
+- Put each family in `styles/fonts/<family>/`: its `.woff2` files (the smallest format, and every current browser reads it) and its `OFL.txt`, and nothing else. Only fonts under the SIL Open Font License, which allows bundling. Fonts are the only files a style bundles.
+- Declare them in the on-screen file with `@font-face`, relative to it: `src: url("fonts/<family>/<file>.woff2") format("woff2")`, with a `font-weight` and `font-style` for each face. The print file can use them without declaring them again.
+- Name each family `md2pdf <Name>`, so it can't collide with a font on a page that embeds the style. Don't use `local()`, which would bring back the differences between computers, or `font-display: optional`, which lets the browser skip the font.
+- Set the bundled family through the font variables, e.g. `--md2pdf-font: "md2pdf Andika", sans-serif`, so they can still be overridden.
+
+The CLI resolves a stylesheet's relative `url()`s against the stylesheet, and loads every declared font before printing, including one used only in a page header. `npm test` checks the file layout, the licence, the family names, `local()` and `font-display`.
+
 The text of the document's first `#` heading (empty if there is none) is available to page margin boxes as `var(--document-title)`, e.g. `@top-left { content: var(--document-title); }`, as the `report` style does.
 
 A style declares the [shared variables](#variables) in its first rule, `:where(.markdown-body) { … }`, with a comment saying what each one does there, and uses them for every size, gap, color and font they name. Spacing follows two patterns: `line-height: calc(1 + 0.55 * var(--md2pdf-leading))` and `margin: calc(1.8em * var(--md2pdf-space)) 0 …`. `npm test` checks that each variable is declared and changes the document. Page margins aren't included: they stay in the style's `@page` rule, in `styles/print/<name>.css`.
@@ -107,6 +116,8 @@ const html = buildDocument({
   pageSize: 'A4',
 });
 ```
+
+A style that [bundles fonts](#adding-a-style) loads them relative to its stylesheet, so a page that inlines the CSS must rewrite those `url()`s, as the CLI does, or let a bundler do it (in Vite, `?inline`, not `?raw`). Before printing, start every font loading and wait: a font used only in a page header may otherwise not be requested until printing starts, and the PDF falls back, as it does in headless Chrome. `await Promise.allSettled([...document.fonts].map((f) => f.load()))`.
 
 | Export | What it is |
 | ------ | ---------- |
@@ -181,6 +192,8 @@ With a bundler such as Vite:
 </body>
 </html>
 ```
+
+A style that bundles fonts loads them from `fonts/` beside its stylesheet, so serve that folder with it. Link the stylesheet, or import it in a way that lets your bundler process its `url()`s (in Vite, a plain import or `?inline`, not `?raw`).
 
 Set the [variables](#variables) on the `.markdown-body` element itself, with any selector or inline (`<article class="markdown-body" style="--md2pdf-font-size: 10pt">`). The style declares its defaults with no specificity, so your rule wins wherever it appears. A value set on `:root` or another element around the document doesn't reach it. One page can hold several documents in the same style, each with its own overrides, but not two different styles.
 
