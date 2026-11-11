@@ -24,3 +24,9 @@ body {
   margin: 0;
   padding: 0;
 }
+
+/* github-markdown-css lets a wide table scroll sideways. Paper can't scroll, so show every column
+   instead of cutting off the ones past the margin. */
+.markdown-body table {
+  overflow: visible;
+}

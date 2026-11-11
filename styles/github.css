@@ -270,9 +270,19 @@
 .markdown-body .task-list-item {
   list-style-type: none;
 }
+/* Boxes drawn here at the browser's size: its own are greyed out, as they're disabled. */
 .markdown-body .task-list-item input {
+  appearance: none;
+  width: 13px;
+  height: 13px;
   margin: 0 0.35em 0.25em -1.4em;
   vertical-align: middle;
+  border: 1px solid var(--md2pdf-accent);
+  border-radius: 2px;
+  background: var(--md2pdf-background);
+}
+.markdown-body .task-list-item input:checked {
+  background: var(--md2pdf-accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
 }
 
 /* github-markdown-css colors GitHub's five alert types. Its flex title would drop the spaces around

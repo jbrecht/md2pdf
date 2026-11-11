@@ -33,6 +33,8 @@
   font-size: var(--md2pdf-font-size);
   line-height: calc(1 + 0.55 * var(--md2pdf-leading));
   color: var(--md2pdf-text);
+  /* A long web address wraps at the margin instead of making Chrome shrink the page to fit it. */
+  overflow-wrap: break-word;
   font-variant-numeric: oldstyle-nums proportional-nums;
   font-kerning: normal;
   -webkit-print-color-adjust: exact;
@@ -71,6 +73,8 @@
   text-align: center;
   letter-spacing: 0.01em;
   margin: 0 0 calc(1.4em * var(--md2pdf-space));
+  /* The rule is a block inside the heading; without this a page can break between them. */
+  break-inside: avoid;
 }
 .markdown-body h1::after {
   content: "";
@@ -136,10 +140,19 @@
 .markdown-body .task-list-item {
   list-style-type: none;
 }
+/* Boxes drawn here at the browser's size: its own are greyed out, as they're disabled. */
 .markdown-body .task-list-item input {
+  appearance: none;
+  width: 13px;
+  height: 13px;
   margin: 0 0.4em 0.2em -1.4em;
   vertical-align: middle;
-  accent-color: var(--md2pdf-accent);
+  border: 1px solid var(--md2pdf-accent);
+  border-radius: 2px;
+  background: var(--md2pdf-background);
+}
+.markdown-body .task-list-item input:checked {
+  background: var(--md2pdf-accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
 }
 
 /* Quotes */
@@ -255,7 +268,7 @@
 /* Muted syntax colors to suit the page. */
 .markdown-body .hljs-comment,
 .markdown-body .hljs-quote {
-  color: #8a8279;
+  color: #746d66;
   font-style: italic;
 }
 .markdown-body .hljs-keyword,
@@ -358,6 +371,8 @@
   width: 30%;
   border-top: 0.75px solid var(--md2pdf-rule);
   margin-bottom: calc(0.8em * var(--md2pdf-space));
+  /* Keep the line on the page with the first footnote. */
+  break-after: avoid;
 }
 .markdown-body .footnotes ol {
   padding-left: 1.2em;

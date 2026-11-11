@@ -71,6 +71,8 @@
   font-size: var(--md2pdf-font-size);
   line-height: calc(1 + 0.6 * var(--md2pdf-leading));
   color: var(--md2pdf-text);
+  /* A long web address wraps at the margin instead of making Chrome shrink the page to fit it. */
+  overflow-wrap: break-word;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
