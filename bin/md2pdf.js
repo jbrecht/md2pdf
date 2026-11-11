@@ -27,6 +27,7 @@ const STYLES = {
   modern: styleFiles('modern'),
   report: styleFiles('report'),
   resume: styleFiles('resume'),
+  worksheet: styleFiles('worksheet'),
 };
 const FALLBACK_STYLE = 'github';
 

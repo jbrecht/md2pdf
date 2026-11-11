@@ -141,7 +141,7 @@ function computedSpacing(htmlFile, dir) {
   return probeInChrome(probed, dir);
 }
 
-const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resume'];
+const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resume', 'worksheet'];
 
 // The CSS a page loads to show a style on screen, without its print rules.
 const screenCss = (style) =>
@@ -364,7 +364,8 @@ for (const style of STYLE_NAMES) {
           if (!/^\\s*(\\.markdown-body|:where\\(\\.markdown-body\\))(?![\\w-])/.test(sel)) global.push(sel.trim());
         }
       } else if (rule instanceof CSSGroupingRule && !(rule instanceof CSSPageRule)) walk(rule.cssRules);
-      else global.push(rule.cssText.slice(0, 80));
+      // A bundled font is declared for the whole page, under a family name of md2pdf's own.
+      else if (!(rule instanceof CSSFontFaceRule && /^["']?md2pdf /.test(rule.style.getPropertyValue('font-family')))) global.push(rule.cssText.slice(0, 80));
     }
   })(style.sheet.cssRules);
   window.probeOut = { changed: changed.slice(0, 20), global };
@@ -553,6 +554,22 @@ test('rejects an unknown style', () => {
   assert.match(r.stderr, /unknown style "bogus"/);
 });
 
+test('worksheet style prints with its bundled fonts', () => {
+  // One page, so it has no page number, which is set in Fredoka too.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'one.md'), '# Title\n\nPlain, **bold** and *italic* text.\n');
+    const r = run('-s', 'worksheet', join(dir, 'one.md'));
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, '');
+    assert.equal(pageCount(join(dir, 'one.pdf')), 1);
+    const fonts = pdfFonts(join(dir, 'one.pdf'));
+    for (const face of ['Andika', 'Andika-Bold', 'Andika-Italic', 'FredokaLight-SemiBold']) assert.ok(fonts.includes(face), `${face} not in ${fonts}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('classic style renders with its own stylesheet', () => {
   const dir = workspace();
   const r = run('-s', 'classic', '--html', join(dir, 'sample.md'));
@@ -568,6 +585,7 @@ for (const [style, marker] of [
   ['modern', /Avenir Next/],
   ['report', /content: var\(--document-title\)/],
   ['resume', /h1 \+ p/],
+  ['worksheet', /md2pdf Andika/],
 ]) {
   test(`${style} style renders with its own stylesheet`, () => {
     const dir = workspace();
@@ -647,7 +665,9 @@ test('rewriteUrls rewrites relative url()s and leaves everything else as it was'
     'a { b: url("fonts/\\66oo.woff2") url(a\\(1\\).png) }',
     'a { b: url(https://example.com/a.png) url("data:image/png;base64,AAAA") url(#clip) url(/abs/b.png) url("") }',
     readFileSync(require.resolve('github-markdown-css/github-markdown-light.css'), 'utf8'),
-    ...STYLE_NAMES.flatMap((s) => [`${s}.css`, `print/${s}.css`].map((f) => readFileSync(join(ROOT, 'styles', f), 'utf8'))),
+    // The styles, less those that bundle fonts: their url()s are relative.
+    ...STYLE_NAMES.flatMap((s) => [`${s}.css`, `print/${s}.css`].map((f) => readFileSync(join(ROOT, 'styles', f), 'utf8')))
+      .filter((css) => relativeUrls(css).length === 0),
   ]) assert.equal(rewrite(css), css);
 });
 
@@ -822,7 +842,7 @@ test('--list-styles marks github as the default when no config exists', () => {
   const r = run('--list-styles');
   assert.equal(r.status, 0);
   assert.match(r.stdout, /^\* github$/m);
-  for (const style of ['classic', 'academic', 'modern', 'report', 'resume']) {
+  for (const style of ['classic', 'academic', 'modern', 'report', 'resume', 'worksheet']) {
     assert.match(r.stdout, new RegExp(`^  ${style}$`, 'm'));
   }
 });

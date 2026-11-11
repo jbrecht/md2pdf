@@ -1,0 +1,30 @@
+/* Worksheet: the print-only rules (page margins, running headers and page numbers). Load after
+   ../worksheet.css when printing; a page that only shows the document on screen leaves this out. */
+
+@page {
+  margin: 0.8in 0.9in;
+  /* Empty boxes stop browsers from adding their own date/title header and URL/page footer. */
+  @top-center {
+    content: "";
+  }
+  /* Margin boxes don't see the document's variables, so these repeat worksheet.css's heading font
+     and accent. */
+  @bottom-center {
+    content: counter(page);
+    font-family: "md2pdf Fredoka", "Arial Rounded MT Bold", sans-serif;
+    font-weight: 600;
+    font-size: 11pt;
+    color: #1f6fd1;
+  }
+}
+@page :first {
+  @bottom-center {
+    content: "";
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}
