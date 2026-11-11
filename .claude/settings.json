@@ -1,0 +1,14 @@
+{
+  "enabledPlugins": {
+    "kit@jbrecht": true
+  },
+  "extraKnownMarketplaces": {
+    "jbrecht": {
+      "source": {
+        "source": "github",
+        "repo": "jbrecht/kit"
+      },
+      "autoUpdate": true
+    }
+  }
+}
