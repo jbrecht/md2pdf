@@ -4,14 +4,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, existsSync, copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, readdirSync, existsSync, copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, dirname, relative } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import hljs from 'highlight.js';
 import { buildDocument, createRenderer, cssString, headingText, titleOf } from '../lib/render.js';
 import { pageMargins } from '../lib/styles.js';
+import { relativeUrls, rewriteUrls } from '../lib/css.js';
 
 const require = createRequire(import.meta.url);
 
@@ -25,6 +26,8 @@ process.env.MD2PDF_CONFIG = CONFIG;
 
 const run = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
 const pageCount = (pdf) => readFileSync(pdf, 'latin1').match(/\/Type\s*\/Page[^s]/g)?.length ?? 0;
+// The PostScript names of the fonts a PDF embeds, without their subset prefix (AAAAAA+).
+const pdfFonts = (pdf) => [...new Set([...readFileSync(pdf, 'latin1').matchAll(/\/BaseFont\s*\/(?:[A-Z]{6}\+)?([^\s/<>[\]()]+)/g)].map((m) => m[1]))];
 
 function workspace() {
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
@@ -143,7 +146,7 @@ const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resum
 // The CSS a page loads to show a style on screen, without its print rules.
 const screenCss = (style) =>
   [...(style === 'github' ? [require.resolve('github-markdown-css/github-markdown-light.css')] : []), join(ROOT, 'styles', `${style}.css`)]
-    .map((f) => readFileSync(f, 'utf8'))
+    .map((f) => rewriteUrls(readFileSync(f, 'utf8'), (ref) => new URL(ref, pathToFileURL(f)).href))
     .join('\n');
 
 // Rendered HTML with every element and class the styles target: code with highlighting, callouts,
@@ -580,6 +583,7 @@ for (const style of STYLE_NAMES) {
     const dir = workspace();
     const r = run('-s', style, '--html', join(dir, 'sample.md'));
     assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, '');
     assert.match(readFileSync(join(dir, 'sample.html'), 'utf8'), new RegExp(`@page \\{\\s*margin: ${pageMargins[style]};`));
   });
 
@@ -626,6 +630,142 @@ test('pageMargins gives each style the margin of its @page rule', () => {
     const css = readFileSync(join(ROOT, 'styles', 'print', `${style}.css`), 'utf8');
     const margins = [...css.matchAll(/^@page[^{]*\{([^]*?)^\}/gm)].flatMap(([, body]) => body.match(/^  margin: ([^;]+);/m)?.[1] ?? []);
     assert.deepEqual(margins, [pageMargins[style]], style);
+  }
+});
+
+test('rewriteUrls rewrites relative url()s and leaves everything else as it was', () => {
+  const rewrite = (css) => rewriteUrls(css, (ref) => `file:///s/${ref}`);
+  for (const [css, expected] of [
+    ['a { src: url("fonts/a.woff2") }', 'a { src: url("file:///s/fonts/a.woff2") }'],
+    ["a { src: url('x y.png') }", 'a { src: url("file:///s/x y.png") }'],
+    ['a { src: url( b.png ) URL(../c.png) }', 'a { src: url("file:///s/b.png") url("file:///s/../c.png") }'],
+    ['a { src: url(100%.png) }', 'a { src: url("file:///s/100%.png") }'],
+  ]) assert.equal(rewrite(css), expected);
+  for (const css of [
+    '/* src: url("fonts/<family>/<file>.woff2") */',
+    'a { content: "see url(x.png)" } b { content: \'it\\\'s url(y.png)\' }',
+    'a { b: url("fonts/\\66oo.woff2") url(a\\(1\\).png) }',
+    'a { b: url(https://example.com/a.png) url("data:image/png;base64,AAAA") url(#clip) url(/abs/b.png) url("") }',
+    readFileSync(require.resolve('github-markdown-css/github-markdown-light.css'), 'utf8'),
+    ...STYLE_NAMES.flatMap((s) => [`${s}.css`, `print/${s}.css`].map((f) => readFileSync(join(ROOT, 'styles', f), 'utf8'))),
+  ]) assert.equal(rewrite(css), css);
+});
+
+// A stylesheet in a folder of its own, away from the Markdown, with the test fonts in fonts/ beside it.
+function stylesheetWithFonts(css) {
+  const dir = join(mkdtempSync(join(tmpdir(), 'md2pdf-css-')), 'My Styles é');
+  cpSync(join(FIXTURES, 'fonts'), join(dir, 'fonts'), { recursive: true });
+  writeFileSync(join(dir, 'style.css'), css);
+  return join(dir, 'style.css');
+}
+const TEST_FONT_FACES = [['400-normal', 400, 'normal'], ['700-normal', 700, 'normal'], ['400-italic', 400, 'italic']]
+  .map(([file, weight, style]) => `@font-face { font-family: "md2pdf Test"; font-weight: ${weight}; font-style: ${style};
+  src: url("fonts/comic-neue/comic-neue-latin-${file}.woff2") format("woff2"); }`)
+  .join('\n');
+
+test('the CLI loads the fonts a stylesheet bundles, relative to the stylesheet', () => {
+  const dir = workspace();
+  const css = stylesheetWithFonts(`${TEST_FONT_FACES}\n.markdown-body { font-family: "md2pdf Test", Georgia; }`);
+  const r = run('--css', css, join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, '');
+  const fonts = pdfFonts(join(dir, 'sample.pdf'));
+  for (const face of ['ComicNeue-Regular', 'ComicNeue-Bold', 'ComicNeue-Italic']) assert.ok(fonts.includes(face), `${face} not in ${fonts}`);
+});
+
+test('a font used only in the page header still loads', () => {
+  const dir = workspace();
+  const css = stylesheetWithFonts(`${TEST_FONT_FACES}\n@page { @top-center { content: "Header"; font-family: "md2pdf Test"; font-weight: 700; } }`);
+  const r = run('--css', css, join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  const fonts = pdfFonts(join(dir, 'sample.pdf'));
+  assert.ok(fonts.includes('ComicNeue-Bold'), fonts.join(' '));
+});
+
+test('a stylesheet URL to a missing file is reported once, and an unreadable one is left to Chrome', () => {
+  const dir = workspace();
+  copyFileSync(join(dir, 'sample.md'), join(dir, 'second.md'));
+  const css = stylesheetWithFonts('@font-face { font-family: "md2pdf Gone"; src: url(fonts/gone.woff2); }\n.markdown-body { background: url(a%2Fb.png); }');
+  const r = run('--css', css, join(dir, 'sample.md'), join(dir, 'second.md'));
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr.match(/no such file: fonts\/gone\.woff2/g)?.length, 1, r.stderr);
+  assert.doesNotMatch(r.stderr, /a%2Fb/);
+});
+
+// What breaks the rules for bundled fonts (README, "Adding a style") in a folder laid out like styles/:
+// on-screen stylesheets, print/ stylesheets and fonts/<family>/.
+function fontProblems(stylesDir) {
+  const problems = [];
+  const fontsDir = join(stylesDir, 'fonts');
+  for (const sub of ['', 'print'].filter((s) => existsSync(join(stylesDir, s)))) {
+    for (const file of readdirSync(join(stylesDir, sub)).filter((f) => f.endsWith('.css')).map((f) => join(sub, f))) {
+      const css = readFileSync(join(stylesDir, file), 'utf8');
+      const code = css.replace(/\/\*[^]*?\*\//g, '');
+      if (/local\(/i.test(code)) problems.push(`${file}: uses local()`);
+      if (/font-display\s*:\s*optional/i.test(code)) problems.push(`${file}: uses font-display: optional`);
+      const faces = code.match(/@font-face\s*\{[^}]*\}/gi) ?? [];
+      if (sub && faces.length) problems.push(`${file}: declares @font-face in a print file`);
+      for (const face of faces) {
+        const family = face.match(/font-family\s*:\s*["']?([^;"'}]*)/i)?.[1].trim();
+        if (!/^md2pdf /.test(family)) problems.push(`${file}: font family "${family}" isn't namespaced`);
+      }
+      for (const ref of relativeUrls(css)) {
+        const target = relative(fontsDir, fileURLToPath(new URL(ref, pathToFileURL(join(stylesDir, file)))));
+        if (!/^[^/.][^/]*\/[^/]+\.woff2$/.test(target)) problems.push(`${file}: ${ref} isn't a .woff2 in fonts/<family>/`);
+        else if (!existsSync(join(fontsDir, target))) problems.push(`${file}: ${ref} doesn't exist`);
+      }
+    }
+  }
+  const families = existsSync(fontsDir) ? readdirSync(fontsDir, { withFileTypes: true }).filter((d) => d.isDirectory()) : [];
+  for (const { name: family } of families) {
+    const files = readdirSync(join(fontsDir, family)).filter((f) => f !== '.DS_Store');
+    const license = join(fontsDir, family, 'OFL.txt');
+    if (!existsSync(license) || !/SIL Open Font License/.test(readFileSync(license, 'utf8'))) problems.push(`fonts/${family}: has no OFL.txt`);
+    for (const f of files.filter((f) => f !== 'OFL.txt')) {
+      if (!f.endsWith('.woff2')) problems.push(`fonts/${family}/${f}: only .woff2 files and OFL.txt belong here`);
+      else if (readFileSync(join(fontsDir, family, f)).subarray(0, 4).toString('latin1') !== 'wOF2') problems.push(`fonts/${family}/${f}: isn't a woff2 font`);
+    }
+  }
+  return problems;
+}
+
+// A folder laid out like styles/ holding `files` ({ path: text }), with the test fonts in fonts/.
+function styleTree(files) {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-styles-'));
+  cpSync(join(FIXTURES, 'fonts'), join(dir, 'fonts'), { recursive: true });
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), text);
+  }
+  return dir;
+}
+
+test('the styles and test fonts follow the rules for bundled fonts', () => {
+  assert.deepEqual(fontProblems(join(ROOT, 'styles')), []);
+  assert.deepEqual(fontProblems(FIXTURES), []);
+  const face = (rest) => `@font-face { font-family : "md2pdf Test"; ${rest} }`;
+  const font = 'fonts/comic-neue/comic-neue-latin-400-normal.woff2';
+  assert.deepEqual(fontProblems(styleTree({
+    'x.css': `${face(`src: URL( ${font} ) format("woff2");`)}\n/* src: url(fonts/<family>/x.ttf); local(Comic) */`,
+    'print/x.css': `@page { @top-center { font-family: "md2pdf Test"; background: url(../${font}); } }`,
+    'fonts/.DS_Store': '',
+    'fonts/comic-neue/.DS_Store': '',
+  })), []);
+  for (const [files, problem] of [
+    [{ 'x.css': `@FONT-FACE { font-family : Playful; src: url(${font}); }` }, /font family "Playful" isn't namespaced/],
+    [{ 'x.css': face('src: local("Comic Neue");') }, /uses local\(\)/],
+    [{ 'x.css': face(`src: url(${font}); font-display: optional;`) }, /font-display: optional/],
+    [{ 'print/x.css': face(`src: url(../${font});`) }, /@font-face in a print file/],
+    [{ 'x.css': face('src: url(fonts/comic-neue/a.ttf);') }, /a\.ttf isn't a \.woff2 in fonts\/<family>\//],
+    [{ 'x.css': face(`src: url(../${font});`) }, /isn't a \.woff2 in fonts\/<family>\//],
+    [{ 'x.css': face('src: url(fonts/comic-neue/missing.woff2);') }, /missing\.woff2 doesn't exist/],
+    [{ 'fonts/comic-neue/ComicNeue-Regular.ttf': 'ttf' }, /only \.woff2 files and OFL\.txt belong here/],
+    [{ 'fonts/lfs/a.woff2': 'version https://git-lfs.github.com/spec/v1', 'fonts/lfs/OFL.txt': 'SIL Open Font License' }, /fonts\/lfs\/a\.woff2: isn't a woff2 font/],
+    [{ 'fonts/nolicense/a.woff2': readFileSync(join(FIXTURES, font)) }, /fonts\/nolicense: has no OFL\.txt/],
+  ]) {
+    const problems = fontProblems(styleTree(files));
+    assert.equal(problems.length, 1, `${JSON.stringify(Object.keys(files))}: ${problems}`);
+    assert.match(problems[0], problem);
   }
 });
 

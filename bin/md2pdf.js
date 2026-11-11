@@ -11,6 +11,7 @@ import { createRequire } from 'node:module';
 
 import hljs from 'highlight.js';
 import { buildDocument, createRenderer, titleOf } from '../lib/render.js';
+import { rewriteUrls } from '../lib/css.js';
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -90,17 +91,40 @@ function findChrome() {
   return found;
 }
 
+// A stylesheet's text, with its relative url()s (a style's bundled fonts, say) made absolute: inlined
+// into the page, they would otherwise resolve against the Markdown file's folder. Warns once about each
+// file they name that doesn't exist.
+const warned = new Set();
+function readCss(file) {
+  return rewriteUrls(readFileSync(file, 'utf8'), (ref) => {
+    const url = new URL(ref, pathToFileURL(file));
+    let missing = false;
+    try {
+      missing = !existsSync(fileURLToPath(url));
+    } catch {
+      // Not a path this system can name, such as one with an encoded slash; let Chrome try it.
+    }
+    const warning = `md2pdf: ${file}: no such file: ${ref}`;
+    if (missing && !warned.has(warning)) {
+      warned.add(warning);
+      console.error(warning);
+    }
+    return url.href;
+  });
+}
+
 function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
-  const css = [...STYLES[style], ...(extraCss ? [extraCss] : [])]
-    .map((f) => readFileSync(f, 'utf8'))
-    .join('\n');
+  const css = [...STYLES[style], ...(extraCss ? [extraCss] : [])].map(readCss).join('\n');
   return buildDocument({
     bodyHtml: createRenderer({ hljs }).render(markdown),
     title,
     css,
     pageSize,
     // <base> makes relative image/link paths resolve against the Markdown file's folder.
-    head: `<base href="${pathToFileURL(baseDir + '/').href}">`,
+    // Chrome loads a font used only in a page header or footer too late for the PDF, so start every
+    // declared font loading now; the PDF waits for those loads with the rest of the page.
+    head: `<base href="${pathToFileURL(baseDir + '/').href}">
+<script>document.addEventListener('DOMContentLoaded', () => document.fonts.forEach((f) => f.load().catch(() => {})));</script>`,
   });
 }
 
