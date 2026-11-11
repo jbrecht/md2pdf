@@ -122,12 +122,12 @@ A style that [bundles fonts](#adding-a-style) loads them relative to its stylesh
 
 | Export | What it is |
 | ------ | ---------- |
-| `@threepenny/md2pdf/render` | `createRenderer({ hljs, math?, html? })`, `buildDocument(...)`, `titleOf(markdown, fallback)` (the first `#` heading's text as it renders, without Markdown syntax, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)` |
+| `@threepenny/md2pdf/render` | `createRenderer({ hljs, math?, html?, idPrefix? })`, `buildDocument(...)`, `titleOf(markdown, fallback)` (the first `#` heading's text as it renders, without Markdown syntax, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)` |
 | `@threepenny/md2pdf/styles` | `pageMargins`: each style's `@page` margin at default spacing, e.g. `pageMargins.classic` is `'1in 1.1in 0.9in'` |
 | `@threepenny/md2pdf/styles/<name>.css` | Each style's on-screen look, scoped to `.markdown-body`. For `github`, load `github-markdown-css/github-markdown-light.css` first |
 | `@threepenny/md2pdf/styles/print/<name>.css` | Each style's print rules: page margins, running headers and page numbers. Load it after the on-screen file, only in a page that holds nothing but the document |
 
-`createRenderer` takes the highlight.js instance to use (so you can pass a smaller bundle such as `highlight.js/lib/common`) and, optionally, `math: { texmath, katex }` from `markdown-it-texmath` and `katex` to render `\( \)`, `\[ \]`, `$` and `$$` formulas; formulas also need KaTeX's stylesheet, `katex/dist/katex.min.css`. Raw HTML in the Markdown is passed through unless you pass `html: false`, which escapes it; page breaks (`<div class="page-break"></div>`) are raw HTML, so they then print as text.
+`createRenderer` takes the highlight.js instance to use (so you can pass a smaller bundle such as `highlight.js/lib/common`) and, optionally, `math: { katex }` to render `\( \)`, `\[ \]`, `$` and `$$` formulas with KaTeX; formulas also need KaTeX's stylesheet, `katex/dist/katex.min.css`. (Before 2.2 it also took markdown-it-texmath, as `math: { texmath, katex }`; that still works, and texmath is ignored.) A formula over 8,000 characters, or one that defines a macro (`\def`, `\newcommand`), shows as its source in red, and sizes such as `\rule` and `\raisebox` are capped at 30em, before a size command such as `\Huge` scales them. Raw HTML in the Markdown is passed through unless you pass `html: false`, which escapes it; page breaks (`<div class="page-break"></div>`) are raw HTML, so they then print as text. `idPrefix` starts the document's ids, as [Embedding in a web page](#embedding-in-a-web-page) describes.
 
 ### Variables
 
@@ -185,8 +185,9 @@ With a bundler such as Vite:
     import hljs from 'highlight.js/lib/common';
     import { createRenderer } from '@threepenny/md2pdf/render';
 
-    // html: false escapes raw HTML, for Markdown you didn't write yourself.
-    const md = createRenderer({ hljs, html: false });
+    // For Markdown you didn't write yourself: html: false escapes raw HTML, and idPrefix keeps the
+    // document's ids apart from the page's.
+    const md = createRenderer({ hljs, html: false, idPrefix: 'notes-' });
     const markdown = '# Notes\n\n> [!tip] Rendered by md2pdf\n> With **callouts**, `code` and [[wikilinks]].\n\n<b>Escaped</b>';
     document.getElementById('rendered-notes').innerHTML = md.render(markdown);
   </script>
@@ -198,14 +199,13 @@ A style that bundles fonts loads them from `fonts/` beside its stylesheet, so se
 
 Set the [variables](#variables) on the `.markdown-body` element itself, with any selector or inline (`<article class="markdown-body" style="--md2pdf-font-size: 10pt">`). The style declares its defaults with no specificity, so your rule wins wherever it appears. A value set on `:root` or another element around the document doesn't reach it. One page can hold several documents in the same style, each with its own overrides, but not two different styles.
 
-The document paints its own background, so on a page that isn't white, give it some padding. Your page's own CSS still applies inside the document, for whatever the style doesn't set: a global `strong { color: #c00 }` reddens bold text in the document too. A highlight.js theme on your page is the exception: the styles keep it out of the document's code blocks. Headings get ids from their text (`# Notes` becomes `id="notes"`) so `[[#Notes]]` links work, so give your own elements ids that a heading won't produce.
+The document paints its own background, so on a page that isn't white, give it some padding. Your page's own CSS still applies inside the document, for whatever the style doesn't set: a global `strong { color: #c00 }` reddens bold text in the document too. A highlight.js theme on your page is the exception: the styles keep it out of the document's code blocks. Headings get ids from their text (`# Notes` becomes `id="notes"`) so `[[#Notes]]` links work. Pass `idPrefix`, letters, digits, `_` and `-` starting with a letter and ending in `-`, to start every heading and footnote id with it, and every link to a `#` in the document: with `idPrefix: 'notes-'`, `# Notes` becomes `id="notes-notes"` and `[see](#notes)` links to it. Then no heading takes an id your page uses, as long as none of your page's ids start with the prefix, and two documents on one page don't share ids, as long as neither's prefix starts the other's (`a-` and `a-b-` would). Without it, give your own elements ids that a heading won't produce. Links in raw HTML, which only `html: true` lets through, aren't rewritten.
 
-For Markdown you didn't write, render with `html: false` and also run the output through a sanitizer such as DOMPurify before inserting it. `html: false` escapes raw HTML, and markdown-it refuses `javascript:`, `vbscript:`, `file:` and non-image `data:` URLs in links and images. Neither is enough alone yet ([#32](https://github.com/jbrecht/md2pdf/issues/32)):
+For Markdown you didn't write, render with `html: false` and an `idPrefix`, as in the example above. `html: false` escapes raw HTML, so the output has no scripts, event handlers, forms or style elements of the author's, and markdown-it refuses `javascript:`, `vbscript:`, `file:` and non-image `data:` URLs in links and images. The prefix keeps the document's ids from shadowing your page's globals (`# config` would otherwise give `id="config"`, which a browser exposes as `window.config`) or its own ids. Documents built to be slow to parse, such as thousands of identical headings, unclosed `[[` or unclosed formulas, render in about the time markdown-it itself takes. A sanitizer such as DOMPurify is still worth running as a second line of defence. What's left to your page:
 
-- If other code on your page uses markdown-it-task-lists with `labelAfter`, that plugin's shared settings let raw HTML through md2pdf's task-list items.
-- Headings become element ids (`# config` gives `id="config"`), which can shadow globals or ids your own scripts rely on.
+- Limit the size of documents you accept. Highlighting a long code block in some languages can take seconds ([#47](https://github.com/jbrecht/md2pdf/issues/47)), and with math the HTML can be about 200 times the size of the Markdown ([#48](https://github.com/jbrecht/md2pdf/issues/48)).
 - Images load from any URL the author chooses. A Content Security Policy's `img-src` limits that.
-- With math enabled, a formula can draw outside the document, so clip the element you render into (`overflow: hidden`).
+- With math, a formula can still draw outside the document: sizes are capped, but a negative space such as `\kern{-300em}` isn't. Clip the element you render into with `contain: paint`, which also clips absolutely positioned content that `overflow: hidden` can let through.
 
 # Development
 

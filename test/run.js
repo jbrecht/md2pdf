@@ -9,10 +9,12 @@ import { tmpdir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import { buildDocument, createRenderer, cssString, headingText, titleOf } from '../lib/render.js';
 import { pageMargins } from '../lib/styles.js';
 import { relativeUrls, rewriteUrls } from '../lib/css.js';
+import mathRules from '../lib/math.js';
 
 const require = createRequire(import.meta.url);
 
@@ -322,9 +324,8 @@ test('the CLI titles the PDF with the heading as it renders', () => {
 });
 
 test('$ math renders beside a line break; prices stay text', async () => {
-  const { default: texmath } = await import('markdown-it-texmath');
   const { default: katex } = await import('katex');
-  const md = createRenderer({ hljs, math: { texmath, katex } });
+  const md = createRenderer({ hljs, math: { katex } });
   const formulas = (src) => md.render(src).match(/<eq>/g)?.length ?? 0;
   assert.equal(formulas('First line ends with $x$\n$y$ starts the second line, and so\non with $z$.'), 3);
   assert.equal(formulas('A formula $x$, then $y$; then $z$.'), 3);
@@ -1013,11 +1014,11 @@ test('the demo loads every renderer dependency, at the installed version', () =>
       else libImports.push(spec);
     }
   })(join(ROOT, 'lib', 'render.js'));
-  assert.ok(seen.size >= 3 && libImports.length >= 5, 'found the renderer imports');
+  assert.ok(seen.size >= 3 && libImports.length >= 3, 'found the renderer imports');
   for (const name of libImports) assert.ok(imports[name], `import map lacks ${name}`);
 
   const urls = [...Object.values(imports), ...[...page.matchAll(/<link [^>]*href="(https:[^"]+)"/g)].map((m) => m[1])];
-  assert.equal(urls.length, 7);
+  assert.equal(urls.length, 5);
   for (const url of urls) {
     const [, name, version] = url.match(/^https:\/\/(?:esm\.sh|cdn\.jsdelivr\.net\/npm)\/(@?[^@]+)@([^/]+)/);
     const pkg = name === '@highlightjs/cdn-assets' ? 'highlight.js' : name;
@@ -1032,6 +1033,306 @@ test('createRenderer passes raw HTML through unless html is false', () => {
   assert.equal(safe.render('<b>x</b> <img src=x onerror=alert(1)>'), '<p>&lt;b&gt;x&lt;/b&gt; &lt;img src=x onerror=alert(1)&gt;</p>\n');
   assert.equal(safe.render('<script>alert(1)</script>'), '<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>\n');
   assert.match(safe.render('> [!note]\n> x'), /^<div class="markdown-alert markdown-alert-note"/);
+});
+
+// Markdown someone else wrote, rendered the way the README tells a host page to: html: false, an id
+// prefix and math. md2pdf.me also passes texmath, which the renderer no longer uses.
+async function untrustedRenderer() {
+  const { default: katex } = await import('katex');
+  return createRenderer({ hljs, html: false, idPrefix: 'doc-', math: { katex, texmath: require('markdown-it-texmath') } });
+}
+// Other markdown-it instances on the page using the plugins md2pdf used to share state with. The last
+// .use of markdown-it-task-lists sets its options for every instance.
+async function poisonHostPlugins() {
+  const { default: katex } = await import('katex');
+  new MarkdownIt().use(require('markdown-it-texmath'), { engine: katex, katexOptions: { trust: true } });
+  new MarkdownIt().use(require('markdown-it-task-lists'), { enabled: true, label: true, labelAfter: true });
+}
+
+test('task lists render as before', () => {
+  assert.equal(render('- [ ] Open\n- [x] Done\n- [X] Also done\n- plain'),
+    '<ul class="contains-task-list">\n' +
+    '<li class="task-list-item"><label><input class="task-list-item-checkbox" disabled="" type="checkbox"> Open</label></li>\n' +
+    '<li class="task-list-item"><label><input class="task-list-item-checkbox" checked="" disabled="" type="checkbox"> Done</label></li>\n' +
+    '<li class="task-list-item"><label><input class="task-list-item-checkbox" checked="" disabled="" type="checkbox"> Also done</label></li>\n' +
+    '<li>plain</li>\n</ul>\n');
+  assert.equal(render('1. [ ] One\n\n2. [x] Two'),
+    '<ol class="contains-task-list">\n' +
+    '<li class="task-list-item">\n<p><label><input class="task-list-item-checkbox" disabled="" type="checkbox"> One</label></p>\n</li>\n' +
+    '<li class="task-list-item">\n<p><label><input class="task-list-item-checkbox" checked="" disabled="" type="checkbox"> Two</label></p>\n</li>\n</ol>\n');
+  assert.equal(render('> - [ ] Quoted'),
+    '<blockquote>\n<ul class="contains-task-list">\n' +
+    '<li class="task-list-item"><label><input class="task-list-item-checkbox" disabled="" type="checkbox"> Quoted</label></li>\n</ul>\n</blockquote>\n');
+  assert.match(render('Text.[^1]\n\n[^1]: - [ ] In a note'),
+    /<li id="fn1" class="footnote-item"><ul class="contains-task-list">\n<li class="task-list-item"><label><input class="task-list-item-checkbox" disabled="" type="checkbox"> In a note<\/label><\/li>/);
+  // markdown-it-task-lists' quirk: an [x] that is a link reference still ticks the box and keeps the link.
+  assert.equal(render('- [x] ref\n\n[x]: https://example.com'),
+    '<ul class="contains-task-list">\n<li class="task-list-item"><label><input class="task-list-item-checkbox" checked="" disabled="" ' +
+    'type="checkbox"><a href="https://example.com">x</a> ref</label></li>\n</ul>\n');
+});
+
+test('another markdown-it on the page can\'t change md2pdf\'s task lists', async () => {
+  const md = createRenderer({ hljs, html: false });
+  await poisonHostPlugins();
+  const html = md.render('- [ ] <img src=x onerror=alert(1)>');
+  assert.equal(html, '<ul class="contains-task-list">\n<li class="task-list-item"><label><input class="task-list-item-checkbox" disabled="" ' +
+    'type="checkbox"> &lt;img src=x onerror=alert(1)&gt;</label></li>\n</ul>\n');
+});
+
+test('with html: false, no token carries raw HTML and every markup-writing rule is known', async () => {
+  const md = await untrustedRenderer();
+  const raw = [];
+  const walk = (tokens) => tokens.forEach((t) => {
+    if (t.type === 'html_inline' || t.type === 'html_block') raw.push(t.content);
+    if (t.children) walk(t.children);
+  });
+  for (const doc of [readFileSync(join(FIXTURES, 'sample.md'), 'utf8'), readFileSync(join(FIXTURES, 'callouts.md'), 'utf8'), SPACING_DOC]) {
+    walk(md.parse(doc, {}));
+  }
+  assert.deepEqual(raw, []);
+  // Each of these writes markup itself rather than through markdown-it's escaping renderer. A new one must
+  // escape what it takes from the document, and be added here.
+  assert.deepEqual(Object.keys(md.renderer.rules).sort(), [
+    'callout_title_close', 'callout_title_open', 'code_block', 'code_inline', 'emoji', 'fence',
+    'footnote_anchor', 'footnote_anchor_name', 'footnote_block_close', 'footnote_block_open', 'footnote_caption',
+    'footnote_close', 'footnote_open', 'footnote_ref', 'hardbreak', 'html_block', 'html_inline', 'image',
+    'math_block', 'math_block_eqno', 'math_inline', 'math_inline_double', 'softbreak', 'task_checkbox',
+    'task_label_close', 'task_label_open', 'text', 'wikilink_embed',
+  ]);
+});
+
+test('idPrefix starts every id and every link to one', () => {
+  const md = createRenderer({ hljs, idPrefix: 'doc-' });
+  const html = md.render('# Config\n\n# Config\n\nSee [[#Config]], [setup](#config), [top](#) and [site](https://example.com/#x).[^1] ^[Inline, [see](#config).]\n\n[^1]: Note.');
+  assert.match(html, /<h1 id="doc-config" tabindex="-1">Config<\/h1>\n<h1 id="doc-config-1" tabindex="-1">Config<\/h1>/);
+  assert.match(html, /<a href="#doc-config">Config<\/a>, <a href="#doc-config">setup<\/a>, <a href="#">top<\/a> and <a href="https:\/\/example.com\/#x">site<\/a>/);
+  assert.match(html, /<sup class="footnote-ref"><a href="#doc-fn:1" id="doc-fnref:1">\[1\]<\/a><\/sup>/);
+  assert.match(html, /<li id="doc-fn:1" class="footnote-item"><p>Note. <a href="#doc-fnref:1" class="footnote-backref">/);
+  assert.match(html, /<li id="doc-fn:2" class="footnote-item"><p>Inline, <a href="#doc-config">see<\/a>\./);
+  // A heading named after a footnote no longer shares its id.
+  assert.match(createRenderer({ hljs, idPrefix: 'doc-' }).render('# fn1\n\nx[^1]\n\n[^1]: n'), /id="doc-fn1"[^]*id="doc-fn:1"/);
+
+  // Two documents on one page share no id.
+  const idsOf = (h) => [...h.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+  const other = createRenderer({ hljs, idPrefix: 'other-' }).render('# Config\n\nx[^1]\n\n[^1]: n');
+  assert.deepEqual(idsOf(html).filter((id) => idsOf(other).includes(id)), []);
+
+  // Without it, ids are as they were.
+  assert.match(createRenderer({ hljs }).render('# Config\n\nx[^1]\n\n[^1]: n'), /id="config"[^]*href="#fn1" id="fnref1"[^]*<li id="fn1"/);
+  for (const bad of ['doc', '1doc-', 'a b-', '"x-', 'doc-"', 3]) {
+    assert.throws(() => createRenderer({ hljs, idPrefix: bad }), TypeError, String(bad));
+  }
+});
+
+test('identical headings are numbered as before', () => {
+  assert.equal(render('# a\n# a\n# a-1\n# a\n# b'),
+    '<h1 id="a" tabindex="-1">a</h1>\n<h1 id="a-1" tabindex="-1">a</h1>\n<h1 id="a-1-1" tabindex="-1">a-1</h1>\n' +
+    '<h1 id="a-2" tabindex="-1">a</h1>\n<h1 id="b" tabindex="-1">b</h1>\n');
+});
+
+test('callout types named after Object.prototype members look like notes', () => {
+  for (const type of ['__proto__', 'constructor', 'toString']) {
+    assert.match(createRenderer({ hljs }).render(`> [!${type}]\n> x`), /^<div class="markdown-alert markdown-alert-note"[^]*<path d="M0 8a8/, type);
+  }
+});
+
+test('a wikilink containing a line separator renders instead of throwing', () => {
+  assert.equal(render('[[a\u2028b]] ![[c\u2029d]] [[e\u2028f|g]]'), '<p>a\u2028b <span class="markdown-embed">Embedded note: c\u2029d</span> g</p>\n');
+});
+
+test('math refuses macro definitions and very long formulas, and caps sizes', async () => {
+  const md = await untrustedRenderer();
+  assert.match(md.render('$\\def\\a{x}\\a$'), /<eq><span class="katex-error" title="Macro definitions aren&#039;t supported" style="color:#cc0000">\\def\\a\{x\}\\a<\/span><\/eq>/);
+  assert.match(md.render('$$\\newcommand{\\b}{y}\\b$$'), /katex-error" title="Macro definitions/);
+  assert.match(md.render('$\\\\\\let\\a b$'), /katex-error" title="Macro definitions/);
+  // \verb\a\ ends at its second backslash, so the \def after it is a definition.
+  assert.match(md.render('$\\verb\\a\\\\def\\x{QQ}\\x$'), /katex-error" title="Macro definitions/);
+  assert.match(md.render(`$${'x'.repeat(8001)}$`), /katex-error" title="Formulas over 8000 characters aren&#039;t rendered"/);
+  assert.doesNotMatch(md.render(`$${'x'.repeat(8000)}$`), /katex-error/);
+  // A command that only starts like one isn't a definition.
+  assert.doesNotMatch(md.render('$\\default$ $\\letter$'), /Macro definitions/);
+  assert.doesNotMatch(md.render('$\\rule{100000em}{100000em}$'), /100000em/);
+  assert.doesNotMatch(md.render('$\\raisebox{60em}{x}$'), /-6\d(\.\d+)?em/);
+  // An exception from KaTeX, such as nesting too deep for the stack, comes back as text.
+  const throwing = createRenderer({ hljs, math: { katex: { renderToString() { throw new RangeError('too deep'); } } } });
+  assert.equal(throwing.render('$x<y$'), '<p><eq>x&lt;y:too deep</eq></p>\n');
+  assert.doesNotThrow(() => md.render(`$${'\\sqrt{'.repeat(1000)}x${'}'.repeat(1000)}$`));
+  // KaTeX's output goes into the page as it is: $& and $$ in it aren't replacement patterns.
+  assert.match(md.render('$\\text{\\$\\&}$'), /\$&amp;/);
+  assert.doesNotMatch(md.render('$\\href{javascript:alert(1)}{x}$ $\\htmlId{x}{y}$'), /href="javascript|id="x"/);
+});
+
+test('math in a blockquote and with equation numbers renders as before', async () => {
+  const md = await untrustedRenderer();
+  const html = md.render('> $$\n> a\n> = b\n> $$\n\n$$c$$ (1)\n\n\\[d\\] (eq. 2)\n\n\\begin{aligned}e\\end{aligned}\n\nInline \\(f\\) and $g$, x$$h$$.');
+  assert.equal((html.match(/<section><eqn>/g) ?? []).length, 3);
+  assert.equal((html.match(/<section class="eqno"><eqn>/g) ?? []).length, 2);
+  assert.match(html, /<span>\(1\)<\/span>[^]*<span>\(eq. 2\)<\/span>/);
+  assert.equal((html.match(/<eq>/g) ?? []).length, 2);
+  assert.doesNotMatch(html, /&gt;/);
+  // A formula ends inside the quote it starts in.
+  assert.match(md.render('> \\[x\n\nafter \\]'), /^<blockquote>\n<p>\[x<\/p>\n<\/blockquote>\n<p>after \]<\/p>/);
+});
+
+test('math parses as markdown-it-texmath did', async () => {
+  const { default: katex } = await import('katex');
+  const texmath = require('markdown-it-texmath');
+  // md2pdf's math before #32: texmath with these options, and its $ rules again, taking a line break.
+  const old = new MarkdownIt().use(texmath, {
+    engine: katex, delimiters: ['brackets', 'dollars', 'beg_end'], outerSpace: true, katexOptions: { throwOnError: false, output: 'html' },
+  });
+  const pre = (src, _outerSpace, at) => at === 0 || /\s/.test(src[at - 1]);
+  const post = (src, _outerSpace, at) => at + 1 >= src.length || /[\s.,;]/.test(src[at + 1]);
+  for (const rule of texmath.rules.dollars.inline) {
+    old.inline.ruler.before('math_inline_double', `${rule.name}_wrapped`, texmath.inline({ ...rule, rex: new RegExp(rule.rex), pre, post }));
+  }
+  const now = new MarkdownIt().use(mathRules, { katex });
+  const shape = (tokens) => tokens.map((t) => [t.type, t.tag, t.content, t.markup, t.info, t.map?.join(), t.nesting, t.children && shape(t.children)]);
+
+  const pieces = ['$', '$', '$$', '\\(', '\\)', '\\[', '\\]', '\\begin{a}', '\\end{a}', '\\begin{ab}', '\\end{ab}', ' (1)', '(', ')',
+    ' ', ' ', '\n', '\n', '\n\n', '> ', '\n> ', 'x', '1', '.', ',', '\\', '\\\\', '\t', String.fromCharCode(0x2028), '{', '}', '- ', '1. ',
+    '[a](b)', '`', '*'];
+  let seed = 32;
+  const random = (n) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
+  const docs = [readFileSync(join(FIXTURES, 'sample.md'), 'utf8'), '> $$\n> a\n> $$', '$$x$$ (1)\n\n\\[y\\] (2)', 'x$$y$$ and 1$$2$$3'];
+  for (let i = 0; i < 20000; i++) docs.push(Array.from({ length: 1 + random(30) }, () => pieces[random(pieces.length)]).join(''));
+  // The same tokens, except where texmath let a displayed formula that started in a quote run on past it.
+  const formulaInQuote = (doc) => {
+    let depth = 0;
+    return old.parse(doc, {}).some((t) => {
+      depth += t.type === 'blockquote_open' ? 1 : t.type === 'blockquote_close' ? -1 : 0;
+      return depth > 0 && t.type.startsWith('math_block');
+    });
+  };
+  const differ = docs.filter((doc) => JSON.stringify(shape(old.parse(doc, {}))) !== JSON.stringify(shape(now.parse(doc, {}))));
+  assert.deepEqual(differ.filter((doc) => !formulaInQuote(doc)), []);
+  assert.ok(docs.length - differ.length > 19000, `${differ.length} of ${docs.length} differ`);
+});
+
+test('adversarial Markdown renders in about the time markdown-it takes', async () => {
+  const md = createRenderer({ hljs, html: false });
+  const withMath = await untrustedRenderer();
+  const base = new MarkdownIt();
+  const elapsed = (f) => {
+    const t = performance.now();
+    f();
+    return performance.now() - t;
+  };
+  // Each took seconds or more before #32, most growing with the square of the length.
+  const cases = {
+    'identical headings': ['# a\n'.repeat(15000), md],
+    'unclosed wikilinks': ['[[a]'.repeat(50000), md],
+    'callouts': ['> [!note]\n\n'.repeat(40000), md],
+    'a long callout marker': [`> [!note]${' '.repeat(80000)}${String.fromCharCode(0x2028)}x`, md],
+    'footnotes': [`${Array.from({ length: 20000 }, (_, i) => `x[^${i}]`).join('\n')}\n\n${Array.from({ length: 20000 }, (_, i) => `[^${i}]: n`).join('\n\n')}`, md],
+    'unclosed footnote references': [`x[^1] ${'[^'.repeat(60000)}\n\n[^1]: x\n`, md],
+    'a task list': ['- [ ] x\n'.repeat(25000), md],
+    'inline $ openers': [' $x'.repeat(40000), withMath],
+    '\\( openers': ['\\('.repeat(80000), withMath],
+    'unclosed environments': ['\\begin{a}\n\n'.repeat(40000), withMath],
+    'quoted formulas closed after the quotes': [`${'> \\[x\n\n'.repeat(2000)}\\]`, withMath],
+    'quoted list formulas closed after the quotes': [`${'> - \\begin{a}\n\n'.repeat(2000)}\\end{a}`, withMath],
+  };
+  const slow = [];
+  for (const [name, [src, renderer]] of Object.entries(cases)) {
+    const limit = 4 * elapsed(() => base.render(src)) + 500;
+    const took = elapsed(() => renderer.render(src));
+    if (took >= limit) slow.push(`${name}: ${Math.round(took)} ms, limit ${Math.round(limit)} ms`);
+  }
+  const took = elapsed(() => titleOf(`---\ntitle: a${' '.repeat(50000)}b\n---\n`, 'stem'));
+  if (took >= 500) slow.push(`titleOf: ${Math.round(took)} ms`);
+  assert.deepEqual(slow, []);
+});
+
+test('a formula can\'t draw outside an element that clips with contain: paint', async () => {
+  const md = await untrustedRenderer();
+  // Each reaches past the element's edge: left with a negative \kern, right, and a capped \rule. (A
+  // raised box makes its line taller instead.)
+  const formulas = md.render('$\\mathllap{\\kern{-10em}\\text{LEFT}}$\n\n$\\kern{25em}\\text{RIGHT}$\n\n$\\rule{100000em}{1em}$');
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const html = join(dir, 'clip.html');
+    writeFileSync(html, `<!DOCTYPE html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="${pathToFileURL(require.resolve('katex/dist/katex.min.css')).href}">
+<style>body { margin: 0; } article { position: absolute; left: 200px; top: 300px; width: 400px; height: 450px; }</style>
+</head><body><article class="markdown-body">${formulas}</article><script>
+  // For each formula, the points outside the article where it's drawn.
+  function hits() {
+    const box = document.querySelector('article').getBoundingClientRect();
+    const all = [...document.querySelectorAll('.katex')];
+    const n = all.map(() => 0);
+    for (let x = 4; x < innerWidth; x += 8) for (let y = 4; y < innerHeight; y += 8) {
+      if (x >= box.left && x < box.right && y >= box.top && y < box.bottom) continue;
+      const formula = document.elementFromPoint(x, y)?.closest('.katex');
+      if (formula) n[all.indexOf(formula)]++;
+    }
+    return n;
+  }
+  const unclipped = hits();
+  document.querySelector('article').style.contain = 'paint';
+  window.probeOut = { unclipped, clipped: hits() };
+</script></body></html>`);
+    const { unclipped, clipped } = probeInChrome(html, dir);
+    // Without the clip each formula reaches outside, so the check can see it.
+    assert.equal(unclipped.length, 3);
+    assert.ok(unclipped.every((n) => n > 0), `unclipped: ${unclipped}`);
+    assert.deepEqual(clipped, [0, 0, 0]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a callout marker line with a line separator stays a quote, as before', () => {
+  assert.match(render(`> [!note] Title${String.fromCharCode(0x2028)}more\n> body`), /^<blockquote>/);
+});
+
+test('titleOf skips an empty title: line', () => {
+  assert.equal(titleOf('---\ntitle:\ntitle: Foo\n---\nNo heading', 'stem'), 'Foo');
+});
+
+test('Markdown rendered as the README says gives the page no script, foreign ids or unsafe links', async () => {
+  const md = await untrustedRenderer();
+  await poisonHostPlugins();
+  const attacks = [
+    '- [ ] <img src=x onerror=alert(1)>',
+    '<script>alert(1)</script> <img src=x onerror=alert(1)> <a href="javascript:alert(1)">x</a> <form><input name=y></form>',
+    '[x](javascript:alert(1)) ![x](javascript:alert(1)) <javascript:alert(1)> [d](data:text/html,x) [v](vbscript:x)',
+    '# config\n\n# name\n\n# location\n\nx[^1] ^[inline [y](#config)]\n\n[^1]: n',
+    '> [!__proto__]\n> x\n\n> [!note]" onmouseover="x\n> y',
+    '[[#<b>]] ![[a.png|1" onerror="x]] ![[x" onerror=".png]] ![[javascript:alert(1).png]]',
+    '```"onx=1 name=z\ncode\n```',
+    '$\\href{javascript:alert(1)}{x}$ $\\htmlId{x}{y}$ $\\includegraphics{x.png}$ $\\url{javascript:x}$ $$\\def\\a{b}\\a$$ $\\htmlStyle{color:red}{s}$',
+    '[top](#) [same](#config) :smile: | a |\n|---|\n| b |',
+  ].map((doc) => md.render(doc)).join('\n');
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const html = join(dir, 'attacks.html');
+    writeFileSync(html, `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><article class="markdown-body"></article><script>
+  const article = document.querySelector('article');
+  article.innerHTML = ${JSON.stringify(attacks).replace(/</g, '\\u003c')};
+  const TAGS = new Set(['A', 'BLOCKQUOTE', 'CODE', 'DIV', 'EM', 'EQ', 'EQN', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HR', 'IMG', 'INPUT', 'LABEL', 'LI', 'OL', 'P', 'PATH', 'PRE', 'SECTION', 'SPAN', 'STRONG', 'SUP', 'SVG', 'TABLE', 'TBODY', 'TD', 'TH', 'THEAD', 'TR', 'UL']);
+  const problems = [];
+  for (const el of article.querySelectorAll('*')) {
+    const tag = el.tagName.toUpperCase();
+    if (!TAGS.has(tag)) problems.push('element ' + tag);
+    for (const { name, value } of el.attributes) {
+      if (/^on/i.test(name) || ['name', 'formaction', 'srcdoc'].includes(name)) problems.push(tag + ' ' + name);
+      if (name === 'id' && !value.startsWith('doc-')) problems.push('id ' + value);
+      if (name === 'style' && !el.closest('.katex, .katex-error')) problems.push('style on ' + tag);
+      if (name === 'href' && !/^(#$|#doc-|https?:|mailto:)/.test(value)) problems.push('href ' + value);
+      if (name === 'src' && /^\\s*(javascript|data|vbscript):/i.test(value)) problems.push('src ' + value);
+    }
+    if (tag === 'INPUT' && !(el.type === 'checkbox' && el.disabled)) problems.push('input ' + el.outerHTML);
+  }
+  window.probeOut = { problems, elements: article.querySelectorAll('*').length, globals: ['config', 'name', 'location'].filter((k) => window[k] instanceof Element) };
+</script></body></html>`);
+    const { problems, elements, globals } = probeInChrome(html, dir);
+    assert.ok(elements > 50, `rendered ${elements} elements`);
+    assert.deepEqual(problems, []);
+    assert.deepEqual(globals, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('cssString escapes what would end the string or the <style> element', () => {

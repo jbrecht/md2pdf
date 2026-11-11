@@ -12,10 +12,8 @@
 {
   "imports": {
     "markdown-it": "https://esm.sh/markdown-it@15.0.2",
-    "markdown-it-anchor": "https://esm.sh/markdown-it-anchor@10.0.0",
     "markdown-it-emoji": "https://esm.sh/markdown-it-emoji@3.1.0",
     "markdown-it-footnote": "https://esm.sh/markdown-it-footnote@4.0.0",
-    "markdown-it-task-lists": "https://esm.sh/markdown-it-task-lists@2.1.1",
     "highlight.js/lib/common": "https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.12.0/es/highlight.min.js"
   }
 }
@@ -92,7 +90,7 @@ Rendered in the browser by **md2pdf**'s renderer, styled by one of its styles, i
 | report | serif and sans | business |
 
 ```js
-const md = createRenderer({ hljs, html: false });
+const md = createRenderer({ hljs, html: false, idPrefix: 'doc-' });
 article.innerHTML = md.render(markdown);
 ```
 
@@ -147,7 +145,7 @@ See [[#What carries over from the CLI]] for a wikilink to a heading.
   const doc = $('doc');
 
   function render() {
-    const md = createRenderer({ hljs, html: $('raw-html').checked });
+    const md = createRenderer({ hljs, html: $('raw-html').checked, idPrefix: 'doc-' });
     doc.innerHTML = md.render($('source').value);
   }
 
