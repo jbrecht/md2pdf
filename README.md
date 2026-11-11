@@ -6,7 +6,7 @@ Convert Markdown to beautifully styled PDFs. This is the rendering engine and ma
 - **On a Mac and comfortable with a terminal?** Install the command-line tool below. It adds a Finder right-click action and a keyboard shortcut.
 - **Building something?** Use the renderer and styles as a dependency, to make PDFs ([Using the renderer](#using-the-renderer)) or to show Markdown in your own pages ([Embedding in a web page](#embedding-in-a-web-page)).
 
-Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, GitHub alerts and Obsidian callouts (`> [!NOTE]`, `> [!tip] Custom title`), Obsidian wikilinks and embeds (`[[Note|alias]]` prints as plain text, `![[image.png]]` as an image, and an embedded note as a placeholder naming it), YAML front matter (left out of the PDF; its `title:` names the document when there is no `#` heading), and page breaks (`<div class="page-break"></div>`). Seven print styles are included: `github`, `classic`, `academic`, `modern`, `report`, `resume` and `worksheet`.
+Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, GitHub alerts and Obsidian callouts (`> [!NOTE]`, `> [!tip] Custom title`), Obsidian wikilinks and embeds (`[[Note|alias]]` prints as plain text, `![[image.png]]` as an image, and an embedded note as a placeholder naming it), YAML front matter (a leading `---` block of `key: value` properties, left out of the PDF; its `title:` names the document when there is no `#` heading. A leading `---` block of ordinary Markdown prints as Markdown after a divider), and page breaks (`<div class="page-break"></div>`). Seven print styles are included: `github`, `classic`, `academic`, `modern`, `report`, `resume` and `worksheet`.
 
 # Command-line tool (macOS)
 
@@ -122,7 +122,7 @@ A style that [bundles fonts](#adding-a-style) loads them relative to its stylesh
 
 | Export | What it is |
 | ------ | ---------- |
-| `@threepenny/md2pdf/render` | `createRenderer({ hljs, math?, html? })`, `buildDocument(...)`, `titleOf(markdown, fallback)` (the first `#` heading, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)` |
+| `@threepenny/md2pdf/render` | `createRenderer({ hljs, math?, html? })`, `buildDocument(...)`, `titleOf(markdown, fallback)` (the first `#` heading's text as it renders, without Markdown syntax, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)` |
 | `@threepenny/md2pdf/styles` | `pageMargins`: each style's `@page` margin at default spacing, e.g. `pageMargins.classic` is `'1in 1.1in 0.9in'` |
 | `@threepenny/md2pdf/styles/<name>.css` | Each style's on-screen look, scoped to `.markdown-body`. For `github`, load `github-markdown-css/github-markdown-light.css` first |
 | `@threepenny/md2pdf/styles/print/<name>.css` | Each style's print rules: page margins, running headers and page numbers. Load it after the on-screen file, only in a page that holds nothing but the document |

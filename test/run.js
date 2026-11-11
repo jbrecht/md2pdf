@@ -25,6 +25,18 @@ const CONFIG = join(mkdtempSync(join(tmpdir(), 'md2pdf-config-')), 'config.json'
 process.env.MD2PDF_CONFIG = CONFIG;
 
 const run = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
+// WCAG contrast ratio of two opaque CSS rgb() colors.
+function contrast(a, b) {
+  const luminance = (rgb) => {
+    const [r, g, bl] = rgb.match(/\d+(\.\d+)?/g).slice(0, 3).map((v) => {
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
 const pageCount = (pdf) => readFileSync(pdf, 'latin1').match(/\/Type\s*\/Page[^s]/g)?.length ?? 0;
 // The PostScript names of the fonts a PDF embeds, without their subset prefix (AAAAAA+).
 const pdfFonts = (pdf) => [...new Set([...readFileSync(pdf, 'latin1').matchAll(/\/BaseFont\s*\/(?:[A-Z]{6}\+)?([^\s/<>[\]()]+)/g)].map((m) => m[1]))];
@@ -259,6 +271,24 @@ test('--- elsewhere, unclosed or longer still renders as before', () => {
   assert.match(render('> ---\n> quoted\n> ---'), /^<blockquote>\n<hr>/);
 });
 
+test('a document that opens with a --- divider keeps its first section', () => {
+  assert.equal(
+    render('---\n\n# Title\n\ntext\n\n---\n\nend'),
+    '<hr>\n<h1 id="title" tabindex="-1">Title</h1>\n<p>text</p>\n<hr>\n<p>end</p>\n',
+  );
+  assert.equal(render('---\nJust a paragraph.\n---\n'), '<hr>\n<h2 id="just-a-paragraph" tabindex="-1">Just a paragraph.</h2>\n');
+  assert.equal(render('---\n# Only a heading\n---\nBody'), '<hr>\n<h1 id="only-a-heading" tabindex="-1">Only a heading</h1>\n<hr>\n<p>Body</p>\n');
+  assert.equal(titleOf('---\n\n# Title\n\ntext\n\n---\n\nend', 'stem'), 'Title');
+  // An AI answer's opening list, with or without a heading over it.
+  assert.equal(
+    render('---\n\n## Key takeaways\n\n- One\n- Two\n\n---\n\nMore'),
+    '<hr>\n<h2 id="key-takeaways" tabindex="-1">Key takeaways</h2>\n<ul>\n<li>One</li>\n<li>Two</li>\n</ul>\n<hr>\n<p>More</p>\n',
+  );
+  assert.match(render('---\n- One\n- Two\n---\n\nBody'), /^<hr>\n<ul>\n<li>One<\/li>/);
+  // Real front matter: properties, lists, block scalars and comments.
+  assert.equal(render('---\ntags:\n  - a\n- b\nnote: |\n  two\n  lines\n# a comment\n---\nBody'), '<p>Body</p>\n');
+});
+
 test('titleOf skips front matter and falls back to its title field', () => {
   assert.equal(titleOf('---\ntitle: From YAML\n---\n# From heading', 'stem'), 'From heading');
   assert.equal(titleOf('---\ntitle: From YAML\n---\nNo heading', 'stem'), 'From YAML');
@@ -267,6 +297,39 @@ test('titleOf skips front matter and falls back to its title field', () => {
   assert.equal(titleOf("---\nsubtitle: x\ntitle: 'Single'\n---\n", 'stem'), 'Single');
   assert.equal(titleOf('---\ntags: [a]\n---\nNothing', 'stem'), 'stem');
   assert.equal(titleOf('title: Not front matter\n', 'stem'), 'stem');
+});
+
+test('titleOf reads the heading as it renders, never a # line in code', () => {
+  assert.equal(titleOf('```bash\n# install deps\nnpm i\n```\n\n# Setup guide\n', 'stem'), 'Setup guide');
+  assert.equal(titleOf('    # indented code\n\nText', 'stem'), 'stem');
+  assert.equal(titleOf('```\n# only in code\n```\n', 'stem'), 'stem');
+  assert.equal(titleOf('# Meeting with [[Sam]]', 'stem'), 'Meeting with Sam');
+  assert.equal(titleOf('# The **final** plan', 'stem'), 'The final plan');
+  assert.equal(titleOf('# Use `npm` & [the docs](https://example.com) <em>now</em> :tada:', 'stem'), 'Use npm & the docs now 🎉');
+  assert.equal(titleOf('## Not a title\n\nUnderlined\n===\n', 'stem'), 'Underlined');
+});
+
+test('the CLI titles the PDF with the heading as it renders', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'note.md'), '```bash\n# install deps\n```\n\n# The **final** plan for [[Sam]]\n');
+    const r = run('--html', join(dir, 'note.md'));
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(readFileSync(join(dir, 'note.html'), 'utf8'), /<title>The final plan for Sam<\/title>/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('$ math renders beside a line break; prices stay text', async () => {
+  const { default: texmath } = await import('markdown-it-texmath');
+  const { default: katex } = await import('katex');
+  const md = createRenderer({ hljs, math: { texmath, katex } });
+  const formulas = (src) => md.render(src).match(/<eq>/g)?.length ?? 0;
+  assert.equal(formulas('First line ends with $x$\n$y$ starts the second line, and so\non with $z$.'), 3);
+  assert.equal(formulas('A formula $x$, then $y$; then $z$.'), 3);
+  assert.equal(formulas('It costs $5 and $10.\nOr $5\nand $10.'), 0);
+  assert.match(md.render('Displayed\n$$a+b$$\ninline'), /<eqn>/);
 });
 
 test('the CLI takes the document title from front matter when there is no heading', () => {
@@ -571,6 +634,124 @@ test('worksheet style keeps the title and its bar on one page', () => {
   }
 });
 
+// A long web address in each kind of text block, and a table wider than the page.
+const WIDE_DOC = `A paragraph with https://example.com/a/very/long/path/that/keeps/going/without/any/spaces/so/it/cannot/wrap?query=string&more=params after it.
+
+- A list item with https://example.com/another/very/long/path/without/spaces/that/runs/past/the/right/margin/of/the/page
+
+> A quote with https://example.com/yet/another/very/long/path/without/spaces/that/runs/past/the/margin/of/the/page
+
+| Plan | Price | Seats | Storage | Support | Uptime | Region | Backups | Audit log | SSO |
+| ---- | ----- | ----- | ------- | ------- | ------ | ------ | ------- | --------- | --- |
+| Starter | $9 per month | 3 seats | 10 GB storage | Email support | 99.5 percent | United States | Daily backups | Not included | Not included |
+`;
+
+for (const style of STYLE_NAMES) {
+  test(`${style} style keeps long web addresses and wide tables on the page`, () => {
+    const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+    try {
+      writeFileSync(join(dir, 'wide.md'), WIDE_DOC);
+      const r = run('-s', style, '--html', join(dir, 'wide.md'));
+      assert.equal(r.status, 0, r.stderr);
+      // Lay the document out at the width it has on Letter paper, between the style's side margins.
+      const side = parseFloat(pageMargins[style].split(' ')[1] ?? pageMargins[style]);
+      const width = (8.5 - 2 * side) * 96;
+      writeFileSync(join(dir, 'wide-probe.html'), readFileSync(join(dir, 'wide.html'), 'utf8').replace('</body>', `<script>
+  const article = document.querySelector('.markdown-body');
+  article.style.width = '${width}px';
+  const right = article.getBoundingClientRect().right + 0.5;
+  // A cell is cut off when an element between it and the document clips what overflows it.
+  const clipped = [...document.querySelectorAll('td, th')].filter((cell) => {
+    for (let el = cell.parentElement; el !== article; el = el.parentElement) {
+      if (getComputedStyle(el).overflowX !== 'visible' && cell.getBoundingClientRect().right > el.getBoundingClientRect().right + 0.5) return true;
+    }
+    return false;
+  }).length;
+  window.probeOut = { clipped, past: [...document.querySelectorAll('p a, li a, blockquote a')].filter((a) => a.getBoundingClientRect().right > right).length };
+</script></body>`));
+      const { clipped, past } = probeInChrome(join(dir, 'wide-probe.html'), dir);
+      assert.equal(past, 0, 'web addresses running past the margin');
+      assert.equal(clipped, 0, 'table cells cut off');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const style of STYLE_NAMES) {
+  test(`${style} style draws task-list boxes that print clearly and can't be ticked`, () => {
+    const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+    try {
+      const list = createRenderer({ hljs }).render('- [ ] Empty\n- [x] Ticked\n');
+      writeFileSync(join(dir, 'tasks.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss(style)}</style></head>
+<body><article class="markdown-body">${list}</article>
+<script>
+  const [empty, ticked] = [...document.querySelectorAll('.task-list-item input')].map((box) => ({ disabled: box.disabled, s: getComputedStyle(box) }));
+  window.probeOut = {
+    disabled: empty.disabled && ticked.disabled,
+    appearance: [empty.s.appearance, ticked.s.appearance],
+    page: getComputedStyle(document.querySelector('.markdown-body')).backgroundColor,
+    emptyBorder: empty.s.borderTopColor, emptyBorderWidth: empty.s.borderTopWidth,
+    tickedFill: ticked.s.backgroundColor,
+  };
+</script></body></html>`);
+      const box = probeInChrome(join(dir, 'tasks.html'), dir);
+      assert.ok(box.disabled, 'boxes can be ticked');
+      // Chrome greys out a disabled box it draws itself, whatever accent-color says.
+      assert.deepEqual(box.appearance, ['none', 'none']);
+      assert.notEqual(box.emptyBorderWidth, '0px');
+      // WCAG asks 3:1 of the parts of a control.
+      assert.ok(contrast(box.emptyBorder, box.page) >= 3, `empty box border ${box.emptyBorder} on ${box.page}`);
+      assert.ok(contrast(box.tickedFill, box.page) >= 3, `ticked box ${box.tickedFill} on ${box.page}`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+test('no style lets a page break between a heading and the rule it draws', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    for (const style of STYLE_NAMES) {
+      writeFileSync(join(dir, 'h.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss(style)}</style></head>
+<body><article class="markdown-body"><p>x</p><h1>A</h1><h2>B</h2><h3>C</h3><h4>D</h4><h5>E</h5><h6>F</h6></article>
+<script>
+  window.probeOut = [...document.querySelectorAll('h1, h2, h3, h4, h5, h6')].map((h) => ({
+    tag: h.tagName,
+    block: ['::before', '::after'].some((p) => getComputedStyle(h, p).content !== 'none' && getComputedStyle(h, p).display === 'block'),
+    breakInside: getComputedStyle(h).breakInside,
+  }));
+</script></body></html>`);
+      for (const { tag, block, breakInside } of probeInChrome(join(dir, 'h.html'), dir)) {
+        if (block) assert.equal(breakInside, 'avoid', `${style} ${tag}`);
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('no style lets a page break between the footnotes line and the first footnote', () => {
+  // Styles that draw the line as the section's top border need nothing: Chrome moves a border with
+  // the first line under it. A line drawn by ::before is a block of its own.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const notes = createRenderer({ hljs }).render('Text.[^1]\n\n[^1]: The note.');
+    for (const style of STYLE_NAMES) {
+      writeFileSync(join(dir, 'fn.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss(style)}</style></head>
+<body><article class="markdown-body">${notes}</article>
+<script>
+  const s = getComputedStyle(document.querySelector('.footnotes'), '::before');
+  window.probeOut = { block: s.content !== 'none' && s.display === 'block', breakAfter: s.breakAfter };
+</script></body></html>`);
+      const { block, breakAfter } = probeInChrome(join(dir, 'fn.html'), dir);
+      if (block) assert.equal(breakAfter, 'avoid', style);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('worksheet style prints with its bundled fonts', () => {
   // One page, so it has no page number, which is set in Fredoka too.
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
@@ -630,10 +811,16 @@ for (const style of STYLE_NAMES) {
 <body><article class="markdown-body">${code}</article>
 <script>
   const color = (sel) => getComputedStyle(document.querySelector(sel)).color;
-  window.probeOut = { code: color('pre code'), keyword: color('.hljs-keyword'), string: color('.hljs-string'), comment: color('.hljs-comment') };
+  window.probeOut = {
+    code: color('pre code'), keyword: color('.hljs-keyword'), string: color('.hljs-string'), comment: color('.hljs-comment'),
+    background: ['pre code', 'pre', '.markdown-body', 'body'].map((sel) => getComputedStyle(document.querySelector(sel)).backgroundColor),
+  };
 </script></body></html>`);
       const c = probeInChrome(join(dir, 'hl.html'), dir);
       for (const token of ['keyword', 'string', 'comment']) assert.notEqual(c[token], c.code, `${token} has the plain code color`);
+      // The nearest background that isn't transparent; the page is white without one.
+      const background = c.background.find((bg) => !/^rgba\(.*, 0\)$/.test(bg)) ?? 'rgb(255, 255, 255)';
+      assert.ok(contrast(c.comment, background) >= 4.5, `comment ${c.comment} on ${background}: ${contrast(c.comment, background).toFixed(2)}:1`);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

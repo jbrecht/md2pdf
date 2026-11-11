@@ -33,6 +33,8 @@
   font-size: var(--md2pdf-font-size);
   line-height: calc(1 + 0.4 * var(--md2pdf-leading));
   color: var(--md2pdf-text);
+  /* A long web address wraps at the margin instead of making Chrome shrink the page to fit it. */
+  overflow-wrap: break-word;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
@@ -137,10 +139,19 @@
 .markdown-body .task-list-item {
   list-style-type: none;
 }
+/* Boxes drawn here at the browser's size: its own are greyed out, as they're disabled. */
 .markdown-body .task-list-item input {
+  appearance: none;
+  width: 13px;
+  height: 13px;
   margin: 0 0.4em 0.15em -1.2em;
   vertical-align: middle;
-  accent-color: var(--md2pdf-accent);
+  border: 1px solid var(--md2pdf-accent);
+  border-radius: 2px;
+  background: var(--md2pdf-background);
+}
+.markdown-body .task-list-item input:checked {
+  background: var(--md2pdf-accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
 }
 
 /* Quotes: e.g. a short summary or a reference. */
@@ -242,7 +253,7 @@
 
 .markdown-body .hljs-comment,
 .markdown-body .hljs-quote {
-  color: #6e7781;
+  color: #69717b;
   font-style: italic;
 }
 .markdown-body .hljs-keyword,
