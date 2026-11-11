@@ -31,7 +31,9 @@
 }
 
 /* Andika (SIL International) and Fredoka, both under the SIL Open Font License; the licences are in
-   fonts/andika/OFL.txt and fonts/fredoka/OFL.txt. Latin only: other letters come from the fallbacks. */
+   fonts/andika/OFL.txt and fonts/fredoka/OFL.txt. Their latin subsets cover English and Western
+   European languages (Basic Latin and Latin-1, plus œ and €); other letters, such as Polish, Czech or
+   Turkish ones, come from the fallbacks. */
 @font-face {
   font-family: "md2pdf Andika";
   font-weight: 400;
@@ -98,6 +100,8 @@
   font-size: calc(31.5 / 13.5 * var(--md2pdf-font-size));
   color: var(--md2pdf-accent);
   margin: 0 0 calc(0.6em * var(--md2pdf-space));
+  /* The bar is a block inside the heading; without this a page can break between them. */
+  break-inside: avoid;
 }
 .markdown-body h1:not(:first-child) {
   margin-top: calc(1.4em * var(--md2pdf-space));
