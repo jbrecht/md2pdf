@@ -554,6 +554,23 @@ test('rejects an unknown style', () => {
   assert.match(r.stderr, /unknown style "bogus"/);
 });
 
+test('worksheet style keeps the title and its bar on one page', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'title.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss('worksheet')}</style></head>
+<body><article class="markdown-body"><h1>Title</h1></article>
+<script>
+  const h1 = document.querySelector('h1');
+  window.probeOut = { bar: getComputedStyle(h1, '::after').display, breakInside: getComputedStyle(h1).breakInside };
+</script></body></html>`);
+    const { bar, breakInside } = probeInChrome(join(dir, 'title.html'), dir);
+    assert.equal(bar, 'block');
+    assert.equal(breakInside, 'avoid');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('worksheet style prints with its bundled fonts', () => {
   // One page, so it has no page number, which is set in Fredoka too.
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
