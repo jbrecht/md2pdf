@@ -1,6 +1,6 @@
 {
   "name": "@threepenny/md2pdf",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "description": "Markdown to beautifully styled PDF: the renderer and macOS CLI behind md2pdf.me",
   "type": "module",
   "license": "MIT",
@@ -36,13 +36,12 @@
     "github-markdown-css": "5.9.0",
     "highlight.js": "^11.12.0",
     "markdown-it": "^15.0.2",
-    "markdown-it-anchor": "^10.0.0",
     "markdown-it-emoji": "^3.1.0",
-    "markdown-it-footnote": "^4.0.0",
-    "markdown-it-task-lists": "^2.1.1"
+    "markdown-it-footnote": "^4.0.0"
   },
   "devDependencies": {
     "katex": "^0.19.1",
+    "markdown-it-task-lists": "^2.1.1",
     "markdown-it-texmath": "^1.0.0"
   }
 }
