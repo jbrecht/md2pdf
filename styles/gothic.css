@@ -181,7 +181,8 @@
   .markdown-body > h1:first-child + p::first-letter {
     -webkit-initial-letter: 3;
     initial-letter: 3;
-    margin-right: 0.1em;
+    /* Chrome ignores a sunk letter's margin, so the gap is padding, in body-text units. */
+    padding-right: calc(0.35 * var(--md2pdf-font-size));
   }
 }
 
@@ -416,6 +417,8 @@
 .markdown-body hr {
   border: 0;
   margin: calc(1.4em * var(--md2pdf-space)) 0;
+  /* Firefox otherwise splits the ornament across a page break. */
+  break-inside: avoid;
 }
 .markdown-body hr::after {
   width: 9em;
@@ -448,7 +451,8 @@
   break-after: avoid;
 }
 .markdown-body .footnotes ol {
-  padding-left: 1.2em;
+  /* Room for the numbers, which Safari sets further left than Chrome. */
+  padding-left: 2em;
 }
 .markdown-body .footnote-ref a,
 .markdown-body .footnote-backref {
