@@ -155,7 +155,7 @@ function computedSpacing(htmlFile, dir) {
   return probeInChrome(probed, dir);
 }
 
-const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resume', 'worksheet'];
+const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resume', 'worksheet', 'gothic'];
 
 // The CSS a page loads to show a style on screen, without its print rules.
 const screenCss = (style) =>
@@ -769,6 +769,52 @@ test('worksheet style prints with its bundled fonts', () => {
   }
 });
 
+test('gothic style prints with its bundled fonts', () => {
+  // One page, so it has no page number, which is set in IM Fell too.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'one.md'), '# Title\n\nPlain, **bold** and *italic* text.\n');
+    const r = run('-s', 'gothic', join(dir, 'one.md'));
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, '');
+    assert.equal(pageCount(join(dir, 'one.pdf')), 1);
+    const fonts = pdfFonts(join(dir, 'one.pdf'));
+    for (const face of ['GrenzeGotisch-SemiBold', 'IM_FELL_English_Roman', 'IM_FELL_English_Italic']) assert.ok(fonts.includes(face), `${face} not in ${fonts}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('gothic style sets a drop cap only under a leading title, and a short paragraph holds it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const md = createRenderer({ hljs });
+    const doc = (body) => `<article class="markdown-body" style="width: 500px">${md.render(body)}</article>`;
+    writeFileSync(join(dir, 'cap.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss('gothic')}</style></head>
+<body>${doc('# Title\n\nShort.\n\nThe next paragraph starts at the margin.')}${doc('No title.')}${doc('Text.\n\n# Later title\n\nUnder a later title.')}
+<script>
+  const [titled, untitled, later] = document.querySelectorAll('.markdown-body');
+  const font = (p) => getComputedStyle(p, '::first-letter').fontFamily;
+  const next = titled.querySelectorAll('p')[1];
+  const range = document.createRange();
+  range.selectNodeContents(next.firstChild);
+  window.probeOut = {
+    indent: range.getClientRects()[0].left - titled.getBoundingClientRect().left,
+    titled: font(titled.querySelector('p')),
+    untitled: font(untitled.querySelector('p')),
+    later: font(later.querySelectorAll('p')[1]),
+  };
+</script></body></html>`);
+    const cap = probeInChrome(join(dir, 'cap.html'), dir);
+    assert.match(cap.titled, /Grenze Gotisch/);
+    assert.doesNotMatch(cap.untitled, /Grenze Gotisch/);
+    assert.doesNotMatch(cap.later, /Grenze Gotisch/);
+    assert.ok(Math.abs(cap.indent) < 1, `the paragraph after a short first one starts ${cap.indent}px from the margin`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('classic style renders with its own stylesheet', () => {
   const dir = workspace();
   const r = run('-s', 'classic', '--html', join(dir, 'sample.md'));
@@ -785,6 +831,7 @@ for (const [style, marker] of [
   ['report', /content: var\(--document-title\)/],
   ['resume', /h1 \+ p/],
   ['worksheet', /md2pdf Andika/],
+  ['gothic', /md2pdf Grenze Gotisch/],
 ]) {
   test(`${style} style renders with its own stylesheet`, () => {
     const dir = workspace();
@@ -1506,7 +1553,7 @@ test('--list-styles marks github as the default when no config exists', () => {
   const r = run('--list-styles');
   assert.equal(r.status, 0);
   assert.match(r.stdout, /^\* github$/m);
-  for (const style of ['classic', 'academic', 'modern', 'report', 'resume', 'worksheet']) {
+  for (const style of STYLE_NAMES.filter((s) => s !== 'github')) {
     assert.match(r.stdout, new RegExp(`^  ${style}$`, 'm'));
   }
 });
