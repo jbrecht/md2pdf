@@ -1209,6 +1209,37 @@ test('math parses as markdown-it-texmath did', async () => {
   assert.ok(docs.length - differ.length > 19000, `${differ.length} of ${docs.length} differ`);
 });
 
+// A fenced code block in `lang`.
+const fence = (lang, code) => `\`\`\`${lang}\n${code}\n\`\`\`\n\n`;
+
+test('highlightBudget limits the time each render spends highlighting', () => {
+  const js = 'let a = 1; // one\nconst b = "two";\n'.repeat(600);
+  const whole = createRenderer({ hljs }).render(fence('js', js));
+  // Under a budget, a block over 4 KB is highlighted in pieces that join up to the same HTML.
+  assert.ok(js.length > 4 * 4096);
+  assert.equal(createRenderer({ hljs, highlightBudget: 1e9 }).render(fence('js', js)), whole);
+  // A piece without a line break in it ends before 4096 characters rather than inside a surrogate pair,
+  // which would leave a half in each of two string spans.
+  const emoji = `x = "${'a'.repeat(4090)}\u{1F600}bbb";`;
+  assert.doesNotMatch(createRenderer({ hljs, highlightBudget: 1e9 }).render(fence('js', emoji)),
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+
+  // Out of budget, code is escaped without colour.
+  assert.equal(createRenderer({ hljs, highlightBudget: 0 }).render(fence('js', 'a < "b"')),
+    '<pre><code class="hljs language-js">a &lt; &quot;b&quot;</code></pre>\n');
+  // html: false sets a budget: the end of a long, slow block is left without colour.
+  const slow = createRenderer({ hljs, html: false }).render(fence('ini', `${'a'.repeat(65536)}\nend = 1`));
+  assert.ok(slow.endsWith('\nend = 1</code></pre>\n'), 'the end of the block is highlighted');
+  // Each render has the whole budget.
+  const md = createRenderer({ hljs, highlightBudget: 50 });
+  md.render(fence('ini', 'a'.repeat(65536)));
+  assert.match(md.render(fence('js', 'let a')), /<span class="hljs-keyword">let<\/span>/);
+
+  for (const bad of [-1, '100', NaN, null]) {
+    assert.throws(() => createRenderer({ hljs, highlightBudget: bad }), TypeError, String(bad));
+  }
+});
+
 test('adversarial Markdown renders in about the time markdown-it takes', async () => {
   const md = createRenderer({ hljs, html: false });
   const withMath = await untrustedRenderer();
@@ -1232,6 +1263,11 @@ test('adversarial Markdown renders in about the time markdown-it takes', async (
     'unclosed environments': ['\\begin{a}\n\n'.repeat(40000), withMath],
     'quoted formulas closed after the quotes': [`${'> \\[x\n\n'.repeat(2000)}\\]`, withMath],
     'quoted list formulas closed after the quotes': [`${'> - \\begin{a}\n\n'.repeat(2000)}\\end{a}`, withMath],
+    // Highlighting, which took seconds before #47.
+    'ini code': [fence('ini', 'a'.repeat(65536)), md],
+    'many ini blocks': [fence('ini', 'a'.repeat(1024)).repeat(400), md],
+    'livescript code': [fence('livescript', '$'.repeat(65536)), md],
+    'C# code in short lines': [fence('csharp', `${'a '.repeat(60)}\n`.repeat(540)), md],
   };
   const slow = [];
   for (const [name, [src, renderer]] of Object.entries(cases)) {
