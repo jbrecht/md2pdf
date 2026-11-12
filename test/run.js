@@ -1251,9 +1251,85 @@ test('math parses as markdown-it-texmath did', async () => {
       return depth > 0 && t.type.startsWith('math_block');
     });
   };
+  // Or where texmath dropped the text after a displayed formula's closing delimiter (#52): its last line
+  // doesn't end in one, or in an equation number.
+  const lines = (doc) => doc.split(/\r\n?|\n/);
+  const closers = { '$$': '$$', '\\[': '\\]' };
+  const textDropped = (doc) =>
+    old.parse(doc, {}).some((t) => {
+      if (!t.type.startsWith('math_block') || !t.map) return false;
+      const line = lines(doc)[t.map[1] - 1] ?? '';
+      const closer = closers[t.tag] ?? `\\end{${t.info}}`;
+      const rest = line.slice(line.lastIndexOf(closer) + closer.length).trim();
+      return rest !== '' && !/^\([^()]*\)$/.test(rest);
+    });
   const differ = docs.filter((doc) => JSON.stringify(shape(old.parse(doc, {}))) !== JSON.stringify(shape(now.parse(doc, {}))));
-  assert.deepEqual(differ.filter((doc) => !formulaInQuote(doc)), []);
+  assert.deepEqual(differ.filter((doc) => !formulaInQuote(doc) && !textDropped(doc)), []);
   assert.ok(docs.length - differ.length > 19000, `${differ.length} of ${docs.length} differ`);
+});
+
+test('text after a displayed formula on its line stays in the output (#52)', async () => {
+  const { default: katex } = await import('katex');
+  const md = createRenderer({ hljs, math: { katex } });
+  const words = (markdown) => md.render(markdown).replace(/<[^>]*>/g, ' ');
+  for (const markdown of ['$$a$$$$b$$ and more text', '$$a$$ and more text', '\\[a\\] and more text', '\\begin{a}x\\end{a} and more text']) {
+    assert.match(words(markdown), /and more text/, markdown);
+  }
+  // In a quote, after a formula that spans lines.
+  assert.match(words('> $$\n> a\n> $$ and more text'), /and more text/);
+  // A formula over several lines stays a block, in a quote or list or with a list-like line inside, and the
+  // text after it follows as a paragraph.
+  assert.match(md.render('$$\n- a\n$$ text\n'), /^<section><eqn>[^]*<\/section><p>text<\/p>\n$/);
+  assert.match(md.render('$$\na\n\nb\n$$ text\n'), /^<section><eqn>[^]*<\/section><p>text<\/p>\n$/);
+  assert.match(md.render('> $$\n> a\n> $$\n'), /^<blockquote>\n<section><eqn>/);
+  assert.match(md.render('- $$\n  a\n  $$\n'), /<li>\n?<section><eqn>/);
+  // Short tails, one ending in a backslash.
+  assert.match(words('$$a$$ x'), / x\s*$/);
+  assert.match(words('$$a$$ \\'), /\\\s*$/);
+  // A formula alone on its line, or followed by an equation number, is still a displayed block.
+  assert.match(md.render('$$a$$\n'), /^<section><eqn>/);
+  assert.match(md.render('$$a$$ (1)\n'), /^<section class="eqno">/);
+  assert.match(md.render('$$a$$   \n'), /^<section><eqn>/);
+});
+
+test('callouts, inline footnotes and nested formulas stay in proportion and fast (#51, #53)', async () => {
+  const { default: katex } = await import('katex');
+  const md = createRenderer({ hljs, html: false, idPrefix: 'doc-', math: { katex } });
+  const count = (html, text) => html.split(text).length - 1;
+
+  // An icon is about 1 KB, so only the first 200 callouts draw one; the rest keep an empty svg.
+  const callouts = '>[!tip]\n\n'.repeat(20000);
+  const c = md.render(callouts);
+  assert.ok(c.length < callouts.length * 30, `${c.length / callouts.length}x`);
+  assert.equal(count(c, '<path'), 200);
+  assert.equal(count(c, '<svg class="octicon"'), 20000);
+  // The count starts again with each render.
+  assert.equal(count(md.render('>[!tip]\n\n'), '<path'), 1);
+
+  // The first 1,000 inline footnotes are footnotes and the rest stay text.
+  const n = md.render('^[a] '.repeat(3000));
+  assert.equal(count(n, 'class="footnote-item"'), 1000);
+  assert.equal(count(n, '^[a]'), 2000);
+  assert.ok(md.render('^[]'.repeat(100000)).length < 100000 * 3 * 10);
+
+  // 100 levels nest, 101 don't, in a displayed and an inline formula.
+  const braces = (depth) => `${'{'.repeat(depth)}x${'}'.repeat(depth)}`;
+  for (const [open, close] of [['$$', '$$'], ['$', '$']]) {
+    assert.doesNotMatch(md.render(`${open}${braces(100)}${close}`), /katex-error/);
+    assert.match(md.render(`${open}${braces(101)}${close}`), /nested over 100 levels deep/);
+  }
+  // Formulas nested past 100 levels are refused before KaTeX runs; ordinary nesting renders.
+  const nested = (depth) => `$$${'\\frac{'.repeat(depth)}x${'}{y}'.repeat(depth)}$$\n\n`;
+  const start = performance.now();
+  const deep = md.render(nested(700).repeat(1000));
+  const ms = performance.now() - start;
+  assert.ok(ms < 1000, `${ms} ms`);
+  assert.equal(count(deep, 'katex-error'), 1000);
+  assert.match(deep, /nested over 100 levels deep/);
+  assert.match(md.render(nested(50)), /class="katex-html"/);
+  assert.doesNotMatch(md.render(nested(50)), /katex-error/);
+  // A brace after a backslash isn't a level.
+  assert.doesNotMatch(md.render(`$$${'\\{'.repeat(300)}x${'\\}'.repeat(300)}$$`), /nested over/);
 });
 
 // A fenced code block in `lang`.
