@@ -29,6 +29,7 @@ const STYLES = {
   resume: styleFiles('resume'),
   worksheet: styleFiles('worksheet'),
   gothic: styleFiles('gothic'),
+  sandwake: styleFiles('sandwake'),
 };
 const FALLBACK_STYLE = 'github';
 

@@ -161,15 +161,16 @@
 /* The drop cap: the first letter of the paragraph under the document's title, sunk three lines deep
    where the browser can size it to the lines (Chrome and Safari). Elsewhere (Firefox) it's a raised
    initial, standing on the first line, since sinking it by hand depends on the font's measurements.
-   A paragraph whose first element is code has none: its first letter would leave the code's box
-   behind, empty. CSS can't tell whether text comes before the code, so that paragraph loses it too. */
-.markdown-body > h1:first-child + p:not(:has(> code:first-child))::first-letter {
+   A paragraph whose first element is code or a key, directly or inside a link or other wrapper, has none:
+   its first letter would leave the code's box behind, empty. CSS can't tell whether text comes
+   before it, so that paragraph loses the drop cap too. */
+.markdown-body > h1:first-child + p:not(:has(> code:first-child)):not(:has(> kbd:first-child)):not(:has(> :first-child > code:first-child)):not(:has(> :first-child > kbd:first-child))::first-letter {
   font-family: var(--md2pdf-heading-font);
   font-weight: 600;
   color: var(--md2pdf-accent);
 }
 @supports not ((initial-letter: 3) or (-webkit-initial-letter: 3)) {
-  .markdown-body > h1:first-child + p:not(:has(> code:first-child))::first-letter {
+  .markdown-body > h1:first-child + p:not(:has(> code:first-child)):not(:has(> kbd:first-child)):not(:has(> :first-child > code:first-child)):not(:has(> :first-child > kbd:first-child))::first-letter {
     font-size: 3em;
     line-height: 1;
     margin-right: 0.03em;
@@ -177,10 +178,10 @@
 }
 @supports (initial-letter: 3) or (-webkit-initial-letter: 3) {
   /* A paragraph shorter than the letter grows to hold it, so the next block doesn't wrap around it. */
-  .markdown-body > h1:first-child + p:not(:has(> code:first-child)) {
+  .markdown-body > h1:first-child + p:not(:has(> code:first-child)):not(:has(> kbd:first-child)):not(:has(> :first-child > code:first-child)):not(:has(> :first-child > kbd:first-child)) {
     display: flow-root;
   }
-  .markdown-body > h1:first-child + p:not(:has(> code:first-child))::first-letter {
+  .markdown-body > h1:first-child + p:not(:has(> code:first-child)):not(:has(> kbd:first-child)):not(:has(> :first-child > code:first-child)):not(:has(> :first-child > kbd:first-child))::first-letter {
     -webkit-initial-letter: 3;
     initial-letter: 3;
     /* Chrome ignores a sunk letter's margin, so the gap is padding, in body-text units. */

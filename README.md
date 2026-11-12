@@ -6,7 +6,7 @@ Convert Markdown to beautifully styled PDFs. This is the rendering engine and ma
 - **On a Mac and comfortable with a terminal?** Install the command-line tool below. It adds a Finder right-click action and a keyboard shortcut.
 - **Building something?** Use the renderer and styles as a dependency, to make PDFs ([Using the renderer](#using-the-renderer)) or to show Markdown in your own pages ([Embedding in a web page](#embedding-in-a-web-page)).
 
-Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, GitHub alerts and Obsidian callouts (`> [!NOTE]`, `> [!tip] Custom title`), Obsidian wikilinks and embeds (`[[Note|alias]]` prints as plain text, `![[image.png]]` as an image, and an embedded note as a placeholder naming it), YAML front matter (a leading `---` block of `key: value` properties, left out of the PDF; its `title:` names the document when there is no `#` heading. A leading `---` block of ordinary Markdown prints as Markdown after a divider), and page breaks (`<div class="page-break"></div>`). Eight print styles are included: `github`, `classic`, `academic`, `modern`, `report`, `resume`, `worksheet` and `gothic`.
+Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcodes, syntax-highlighted code, raw HTML, GitHub alerts and Obsidian callouts (`> [!NOTE]`, `> [!tip] Custom title`), Obsidian wikilinks and embeds (`[[Note|alias]]` prints as plain text, `![[image.png]]` as an image, and an embedded note as a placeholder naming it), YAML front matter (a leading `---` block of `key: value` properties, left out of the PDF; its `title:` names the document when there is no `#` heading. A leading `---` block of ordinary Markdown prints as Markdown after a divider), and page breaks (`<div class="page-break"></div>`). Nine print styles are included: `github`, `classic`, `academic`, `modern`, `report`, `resume`, `worksheet`, `gothic` and `sandwake`.
 
 # Command-line tool (macOS)
 
@@ -64,6 +64,7 @@ From Finder, a single file opens in Preview when done; multiple files show a not
 | `resume`  | Compact and one-page friendly: the first heading is your name, the paragraph after it your contact line, `##` headings are ruled section dividers |
 | `worksheet` | For worksheets, stories and class handouts: Andika body text and rounded Fredoka headings (both bundled), larger type, bright headings that change color each section, outlined rounded boxes and big tick boxes for task lists |
 | `gothic` | An old book of dread: blackletter Grenze Gotisch headings and IM Fell English body text (both bundled), oxblood red titles, main headings and table rules, a drop cap after the title, leaf ornaments for rules, page numbers between dashes |
+| `sandwake` | A space-opera codex: wide Michroma capitals for titles and sections, Spectral text and Space Mono labels (all bundled), rust section numbers and drop cap, later titles numbered as books ("Liber II"), a setting-sun rule, outlined code and callouts, a running title and folio numbers |
 
 Switch the default style — used by the Finder Quick Action, the keyboard shortcut and the `md2pdf` command:
 
@@ -142,12 +143,12 @@ Every style takes the same variables, set on the `.markdown-body` element. A `--
 | `--md2pdf-background` | The document's background, white |
 | `--md2pdf-text` | Body text |
 | `--md2pdf-muted` | Secondary text, such as footnotes and captions |
-| `--md2pdf-accent` | The accent color: links, headings, list markers or callouts, depending on the style. `gothic`'s leaf ornaments stay oxblood |
+| `--md2pdf-accent` | The accent color: links, headings, list markers or callouts, depending on the style. `gothic`'s leaf ornaments stay oxblood, and `sandwake`'s horizon ornament stays rust |
 | `--md2pdf-rule` | Rules, borders and table lines (every style but `github`) |
-| `--md2pdf-surface` | A tinted background: inline code and code blocks in `classic`, `modern`, `worksheet` and `gothic`, and callouts too in `classic` and `gothic`; inline code, quotes and table headings in `report`. The other styles don't use it |
+| `--md2pdf-surface` | A tinted background: inline code and code blocks in `classic`, `modern`, `worksheet` and `gothic`, and callouts too in `classic` and `gothic`; inline code, quotes and table headings in `report`; the inside of code blocks, callouts and inline code in `sandwake`, white as designed. The other styles don't use it |
 | `--md2pdf-font` | The body font |
-| `--md2pdf-heading-font` | The heading font: the body font, except in `report`, where it's Helvetica and also sets callout titles and tables, in `worksheet`, where it's Fredoka and also sets callout titles, table headings and list markers, and in `gothic`, where it's Grenze Gotisch for `#`, `##` and `###` headings and the drop cap |
-| `--md2pdf-code-font` | The code font |
+| `--md2pdf-heading-font` | The heading font: the body font, except in `report`, where it's Helvetica and also sets callout titles and tables, in `worksheet`, where it's Fredoka and also sets callout titles, table headings and list markers, in `gothic`, where it's Grenze Gotisch for `#`, `##` and `###` headings and the drop cap, and in `sandwake`, where it's Michroma for `#` and `##` headings and the drop cap |
+| `--md2pdf-code-font` | The code font, and in `sandwake` the small capital labels too: section and book numbers, `####` headings, table headings, callout titles and ordered-list numbers |
 
 The styles are designed for light pages; a dark page isn't supported. Page headers and footers in a PDF keep the style's own fonts and colors.
 
