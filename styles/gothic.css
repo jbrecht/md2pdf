@@ -160,14 +160,16 @@
 
 /* The drop cap: the first letter of the paragraph under the document's title, sunk three lines deep
    where the browser can size it to the lines (Chrome and Safari). Elsewhere (Firefox) it's a raised
-   initial, standing on the first line, since sinking it by hand depends on the font's measurements. */
-.markdown-body > h1:first-child + p::first-letter {
+   initial, standing on the first line, since sinking it by hand depends on the font's measurements.
+   A paragraph whose first element is code has none: its first letter would leave the code's box
+   behind, empty. CSS can't tell whether text comes before the code, so that paragraph loses it too. */
+.markdown-body > h1:first-child + p:not(:has(> code:first-child))::first-letter {
   font-family: var(--md2pdf-heading-font);
   font-weight: 600;
   color: var(--md2pdf-accent);
 }
 @supports not ((initial-letter: 3) or (-webkit-initial-letter: 3)) {
-  .markdown-body > h1:first-child + p::first-letter {
+  .markdown-body > h1:first-child + p:not(:has(> code:first-child))::first-letter {
     font-size: 3em;
     line-height: 1;
     margin-right: 0.03em;
@@ -175,13 +177,14 @@
 }
 @supports (initial-letter: 3) or (-webkit-initial-letter: 3) {
   /* A paragraph shorter than the letter grows to hold it, so the next block doesn't wrap around it. */
-  .markdown-body > h1:first-child + p {
+  .markdown-body > h1:first-child + p:not(:has(> code:first-child)) {
     display: flow-root;
   }
-  .markdown-body > h1:first-child + p::first-letter {
+  .markdown-body > h1:first-child + p:not(:has(> code:first-child))::first-letter {
     -webkit-initial-letter: 3;
     initial-letter: 3;
-    margin-right: 0.1em;
+    /* Chrome ignores a sunk letter's margin, so the gap is padding, in body-text units. */
+    padding-right: calc(0.35 * var(--md2pdf-font-size));
   }
 }
 
@@ -416,6 +419,8 @@
 .markdown-body hr {
   border: 0;
   margin: calc(1.4em * var(--md2pdf-space)) 0;
+  /* Firefox otherwise splits the ornament across a page break. */
+  break-inside: avoid;
 }
 .markdown-body hr::after {
   width: 9em;
@@ -448,7 +453,8 @@
   break-after: avoid;
 }
 .markdown-body .footnotes ol {
-  padding-left: 1.2em;
+  /* Room for the numbers, which Safari sets further left than Chrome. */
+  padding-left: 2em;
 }
 .markdown-body .footnote-ref a,
 .markdown-body .footnote-backref {
