@@ -1162,6 +1162,53 @@ test('math refuses macro definitions and very long formulas, and caps sizes', as
   assert.doesNotMatch(md.render('$\\href{javascript:alert(1)}{x}$ $\\htmlId{x}{y}$'), /href="javascript|id="x"/);
 });
 
+test('math stops rendering once a document has made 10,000,000 characters of HTML', async () => {
+  const md = await untrustedRenderer();
+  // Without the budget, 120 KB of this is 15.9 MB of HTML.
+  const source = '$x_y$ '.repeat(20000);
+  const html = md.render(source);
+  assert.ok(html.length < 11_000_000, `${html.length} characters`);
+  assert.match(html, /^<p><eq><span class="katex">/);
+  // Only the first formula past the budget says why.
+  assert.equal((html.match(/<eq><span class="katex-error" title="The document&#039;s formulas reached their limit of 10,000,000 characters of HTML" style="color:#cc0000">x_y<\/span><\/eq>/g) ?? []).length, 1);
+  assert.match(html, /<eq><span class="katex-error" style="color:#cc0000">x_y<\/span><\/eq><\/p>\n$/);
+
+  // A host can change it. A formula whose HTML would take the document past it shows as its source too:
+  // this matrix is over 4,000,000 characters of HTML.
+  const { default: katex } = await import('katex');
+  const matrix = `$$\\begin{smallmatrix}${'&'.repeat(7900)}\\end{smallmatrix}$$`;
+  const capped = createRenderer({ hljs, math: { katex, maxHtml: 10_000 } });
+  const small = capped.render(`$a$ $b$\n\n${matrix}\n\n$c$ $$d$$\n\n$$e$$ (1)`);
+  assert.ok(small.length < 100_000, `${small.length} characters`);
+  assert.equal((small.match(/class="katex"/g) ?? []).length, 2);
+  assert.equal((small.match(/class="katex-error"/g) ?? []).length, 4);
+  assert.equal((small.match(/reached their limit of 10,000 characters/g) ?? []).length, 1);
+  // The budget starts again with each render, even when the env is reused or the tokens rendered twice.
+  const env = {};
+  capped.render(matrix, env);
+  assert.doesNotMatch(capped.render('$x$', env), /katex-error/);
+  const tokens = capped.parse(`${matrix}\n\n$x$`, {});
+  for (let i = 0; i < 2; i++) assert.match(capped.renderer.render(tokens, capped.options), /^<section><eqn><span class="katex-error" title=/);
+  const inline = capped.parseInline(`$x$ ${matrix} $y$`, {})[0].children;
+  for (let i = 0; i < 2; i++) assert.match(capped.renderer.renderInline(inline, capped.options), /^<eq><span class="katex">[^]*title=[^]*>y<\/span><\/eq>$/);
+  // A render a rule starts inside another spends the same budget.
+  const nested = createRenderer({ hljs, math: { katex, maxHtml: 10_000 } });
+  nested.renderer.rules.text = (tokens, idx) => {
+    const { content } = tokens[idx];
+    return content.includes('#') ? nested.renderInline(content.replace(/#/g, '$')) : content;
+  };
+  assert.match(nested.render(`${matrix}\n\n#z#`), /<p><eq><span class="katex-error" style="color:#cc0000">z<\/span><\/eq><\/p>/);
+  // Past the budget, the HTML stays in proportion to the Markdown, as without math.
+  const none = createRenderer({ hljs, math: { katex, maxHtml: 0 } });
+  const short = '\\(x\\)'.repeat(100000);
+  assert.ok(none.render(short).length < 15 * short.length);
+  assert.match(none.render('$a$'), /katex-error/);
+  assert.doesNotMatch(createRenderer({ hljs, math: { katex, maxHtml: Infinity } }).render(source), /katex-error/);
+  for (const maxHtml of [-1, NaN, '100', null]) {
+    assert.throws(() => createRenderer({ hljs, math: { katex, maxHtml } }), TypeError, String(maxHtml));
+  }
+});
+
 test('math in a blockquote and with equation numbers renders as before', async () => {
   const md = await untrustedRenderer();
   const html = md.render('> $$\n> a\n> = b\n> $$\n\n$$c$$ (1)\n\n\\[d\\] (eq. 2)\n\n\\begin{aligned}e\\end{aligned}\n\nInline \\(f\\) and $g$, x$$h$$.');
