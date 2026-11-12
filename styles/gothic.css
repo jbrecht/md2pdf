@@ -1,0 +1,467 @@
+/* Gothic: a page from an old book of dread. Blackletter titles and section headings and a
+   seventeenth-century book face (both bundled), oxblood for the title and main headings, ornaments,
+   quote bars and table rules, a drop cap after the title and a leaf ornament for rules. No page
+   background: the paper stays white up to its edges. */
+
+/* Variables a page can override, on .markdown-body itself: for all its documents, or for one with
+   <article class="markdown-body" style="--md2pdf-font-size: 13pt">. A value set on :root or another
+   ancestor doesn't reach the document. :where() gives these defaults no specificity, so the page's
+   rule wins wherever it comes. Every style uses the same names. */
+:where(.markdown-body) {
+  /* Size and spacing. --md2pdf-font-size is the body text size, an absolute length such as 12pt or 16px; headings and smaller text scale with
+     it. --md2pdf-leading scales each line height's excess over 1, and --md2pdf-space the vertical
+     gaps between blocks; both are 1 as designed. */
+  --md2pdf-font-size: 12pt;
+  --md2pdf-leading: 1;
+  --md2pdf-space: 1;
+  /* Colors: --md2pdf-background the document's background; --md2pdf-text body text; --md2pdf-muted
+     secondary text; --md2pdf-accent h1, h2 and h4, the drop cap, links, list markers, quote bars,
+     tick boxes, caution callouts, table headings and rules, and the footnote rule (the leaf ornaments
+     stay oxblood); --md2pdf-rule thin rules and borders;
+     --md2pdf-surface code and callout backgrounds. */
+  --md2pdf-background: #fff;
+  --md2pdf-text: #1c1916;
+  --md2pdf-muted: #5f574e;
+  --md2pdf-accent: #7a1f1f;
+  --md2pdf-rule: #c9b9a6;
+  --md2pdf-surface: #f7f2eb;
+  /* Fonts: --md2pdf-font body text, --md2pdf-heading-font h1, h2, h3 and the drop cap,
+     --md2pdf-code-font code. */
+  --md2pdf-font: "md2pdf IM Fell English", "Iowan Old Style", Palatino, Georgia, serif;
+  --md2pdf-heading-font: "md2pdf Grenze Gotisch", var(--md2pdf-font);
+  --md2pdf-code-font: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* IM Fell English (Igino Marini) and Grenze Gotisch (Omnibus-Type), both under the SIL Open Font
+   License; the licences are in fonts/im-fell-english/OFL.txt and fonts/grenze-gotisch/OFL.txt. Their
+   latin subsets cover English and Western European languages (Basic Latin and Latin-1, plus œ and
+   €); other letters come from the fallbacks. IM Fell has no bold, so bold text is the browser's
+   thickening of the regular face. */
+@font-face {
+  font-family: "md2pdf IM Fell English";
+  font-weight: 400;
+  font-style: normal;
+  src: url("fonts/im-fell-english/im-fell-english-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "md2pdf IM Fell English";
+  font-weight: 400;
+  font-style: italic;
+  src: url("fonts/im-fell-english/im-fell-english-latin-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "md2pdf Grenze Gotisch";
+  font-weight: 600;
+  font-style: normal;
+  src: url("fonts/grenze-gotisch/grenze-gotisch-latin-600-normal.woff2") format("woff2");
+}
+
+.markdown-body {
+  font-family: var(--md2pdf-font);
+  background: var(--md2pdf-background);
+  font-size: var(--md2pdf-font-size);
+  line-height: calc(1 + 0.5 * var(--md2pdf-leading));
+  color: var(--md2pdf-text);
+  /* A long web address wraps at the margin instead of making Chrome shrink the page to fit it. */
+  overflow-wrap: break-word;
+  font-kerning: normal;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.markdown-body p,
+.markdown-body li {
+  text-align: justify;
+  hyphens: auto;
+  orphans: 3;
+  widows: 3;
+}
+
+.markdown-body p {
+  margin: 0 0 calc(0.75em * var(--md2pdf-space));
+}
+
+/* The leaf ornament under the title and in place of --- rules: a hedera between two hairlines. The
+   fonts have no ornaments of their own. It's an image in the accent's oxblood, so it keeps that color
+   when --md2pdf-accent changes: a mask would follow the variable, but Chrome prints a solid block
+   beside a masked element. */
+.markdown-body h1::after,
+.markdown-body hr::after {
+  content: "";
+  display: block;
+  height: 1.1em;
+  margin: 0 auto;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 24'%3E%3Cg fill='none' stroke='%237a1f1f'%3E%3Cpath d='M4 12H44M80 12H116' stroke-width='1'/%3E%3Cpath d='M54 12C50.5 12 47.5 10 48 7.6C48.4 5.8 50.6 5.6 51.2 7' stroke-width='1.3'/%3E%3C/g%3E%3Cpath fill='%237a1f1f' transform='translate(50 0) rotate(-90 12 12)' d='M12 21C5 15 1 11 1 7C1 3.5 4 1 7 1C9.5 1 11 2.5 12 4C13 2.5 14.5 1 17 1C20 1 23 3.5 23 7C23 11 19 15 12 21Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* Headings */
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: normal;
+  line-height: calc(1 + 0.2 * var(--md2pdf-leading));
+  break-after: avoid;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  font-family: var(--md2pdf-heading-font);
+  font-weight: 600;
+  color: var(--md2pdf-accent);
+}
+
+.markdown-body h1 {
+  font-size: calc(34 / 12 * var(--md2pdf-font-size));
+  text-align: center;
+  margin: 0 0 calc(0.75em * var(--md2pdf-space));
+  /* The ornament is a block inside the heading; without this a page can break between them. */
+  break-inside: avoid;
+}
+.markdown-body h1::after {
+  width: 5.5em;
+  height: 0.5em;
+  margin-top: calc(0.3em * var(--md2pdf-space));
+}
+/* Any later h1 starts a new section with a bit more air. */
+.markdown-body h1:not(:first-child) {
+  margin-top: calc(1.6em * var(--md2pdf-space));
+}
+
+.markdown-body h2 {
+  font-size: calc(21 / 12 * var(--md2pdf-font-size));
+  margin: calc(1.5em * var(--md2pdf-space)) 0 calc(0.45em * var(--md2pdf-space));
+}
+
+.markdown-body h3 {
+  font-size: calc(16 / 12 * var(--md2pdf-font-size));
+  color: var(--md2pdf-text);
+  margin: calc(1.4em * var(--md2pdf-space)) 0 calc(0.4em * var(--md2pdf-space));
+}
+
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: var(--md2pdf-font-size);
+  font-style: italic;
+  margin: calc(1.2em * var(--md2pdf-space)) 0 calc(0.3em * var(--md2pdf-space));
+}
+.markdown-body h4 {
+  color: var(--md2pdf-accent);
+  font-size: calc(13 / 12 * var(--md2pdf-font-size));
+}
+.markdown-body h6 {
+  color: var(--md2pdf-muted);
+}
+
+/* The drop cap: the first letter of the paragraph under the document's title, sunk three lines deep
+   where the browser can size it to the lines (Chrome and Safari). Elsewhere (Firefox) it's a raised
+   initial, standing on the first line, since sinking it by hand depends on the font's measurements. */
+.markdown-body > h1:first-child + p::first-letter {
+  font-family: var(--md2pdf-heading-font);
+  font-weight: 600;
+  color: var(--md2pdf-accent);
+}
+@supports not ((initial-letter: 3) or (-webkit-initial-letter: 3)) {
+  .markdown-body > h1:first-child + p::first-letter {
+    font-size: 3em;
+    line-height: 1;
+    margin-right: 0.03em;
+  }
+}
+@supports (initial-letter: 3) or (-webkit-initial-letter: 3) {
+  /* A paragraph shorter than the letter grows to hold it, so the next block doesn't wrap around it. */
+  .markdown-body > h1:first-child + p {
+    display: flow-root;
+  }
+  .markdown-body > h1:first-child + p::first-letter {
+    -webkit-initial-letter: 3;
+    initial-letter: 3;
+    margin-right: 0.1em;
+  }
+}
+
+/* Links */
+
+.markdown-body a {
+  color: var(--md2pdf-accent);
+  text-decoration: none;
+}
+.markdown-body a.header-anchor {
+  display: none;
+}
+
+/* Lists */
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0 0 calc(0.75em * var(--md2pdf-space));
+  padding-left: 1.6em;
+}
+.markdown-body li {
+  margin: calc(0.15em * var(--md2pdf-space)) 0;
+}
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin: calc(0.15em * var(--md2pdf-space)) 0 0;
+}
+.markdown-body li::marker {
+  color: var(--md2pdf-accent);
+}
+.markdown-body .task-list-item {
+  list-style-type: none;
+}
+/* Boxes drawn here at the browser's size: its own are greyed out, as they're disabled. */
+.markdown-body .task-list-item input {
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin: 0 0.4em 0.2em -1.4em;
+  vertical-align: middle;
+  border: 1px solid var(--md2pdf-accent);
+  border-radius: 1px;
+  background: var(--md2pdf-background);
+}
+.markdown-body .task-list-item input:checked {
+  background: var(--md2pdf-accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
+}
+
+/* Quotes */
+
+.markdown-body blockquote {
+  margin: calc(1.1em * var(--md2pdf-space)) 2em;
+  padding: 0 0 0 1em;
+  border-left: 2px solid var(--md2pdf-accent);
+  font-style: italic;
+  color: #3f3832;
+  break-inside: avoid;
+}
+.markdown-body blockquote p {
+  text-align: left;
+}
+
+/* Callouts (GitHub alerts and Obsidian callouts): a ruled box, its title in small capitals. */
+
+.markdown-body .markdown-alert {
+  --md2pdf-callout: #3d5468;
+  margin: calc(1.1em * var(--md2pdf-space)) 0;
+  padding: 0.55em 1em 0.6em;
+  border-left: 2px solid var(--md2pdf-callout);
+  background: var(--md2pdf-surface);
+  break-inside: avoid;
+}
+.markdown-body .markdown-alert-tip {
+  --md2pdf-callout: #45603a;
+}
+.markdown-body .markdown-alert-important {
+  --md2pdf-callout: #5e3f6b;
+}
+.markdown-body .markdown-alert-warning {
+  --md2pdf-callout: #845d12;
+}
+.markdown-body .markdown-alert-caution {
+  --md2pdf-callout: var(--md2pdf-accent);
+}
+.markdown-body .markdown-alert-quote {
+  --md2pdf-callout: var(--md2pdf-muted);
+}
+.markdown-body .markdown-alert-title {
+  margin-bottom: calc(0.3em * var(--md2pdf-space));
+  color: var(--md2pdf-callout);
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  text-align: left;
+  hyphens: manual;
+}
+.markdown-body .markdown-alert-title .octicon {
+  margin-right: 0.45em;
+  vertical-align: -0.1em;
+  width: 0.85em;
+  height: 0.85em;
+  fill: currentColor;
+}
+.markdown-body .markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
+/* Code */
+
+.markdown-body code,
+.markdown-body kbd {
+  font-family: var(--md2pdf-code-font);
+  font-size: 0.78em;
+}
+.markdown-body :not(pre) > code {
+  background: var(--md2pdf-surface);
+  padding: 0.1em 0.3em;
+  border-radius: 2px;
+}
+.markdown-body kbd {
+  padding: 0.05em 0.35em;
+  border: 1px solid var(--md2pdf-rule);
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  background: var(--md2pdf-background);
+}
+.markdown-body pre {
+  background: var(--md2pdf-surface);
+  border: 1px solid var(--md2pdf-rule);
+  border-radius: 2px;
+  padding: 0.9em 1.1em;
+  margin: 0 0 calc(1em * var(--md2pdf-space));
+  line-height: calc(1 + 0.45 * var(--md2pdf-leading));
+  white-space: pre-wrap;
+  word-break: break-word;
+  break-inside: avoid;
+}
+.markdown-body pre code {
+  font-size: calc(8.5 / 12 * var(--md2pdf-font-size));
+}
+/* A highlight.js theme on the host page styles .hljs too; keep code blocks this style's own. */
+.markdown-body pre code.hljs {
+  display: inline;
+  overflow: visible;
+  padding: 0;
+  color: inherit;
+  background: none;
+}
+/* And its tokens: this outranks a theme's token rules, and this style's colors come after it. */
+.markdown-body [class*="hljs-"] {
+  color: inherit;
+  background: none;
+  font-style: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+
+/* Muted, inky syntax colors. */
+.markdown-body .hljs-comment,
+.markdown-body .hljs-quote {
+  color: #6e665d;
+  font-style: italic;
+}
+.markdown-body .hljs-keyword,
+.markdown-body .hljs-selector-tag,
+.markdown-body .hljs-literal,
+.markdown-body .hljs-doctag {
+  color: #8f2424;
+}
+.markdown-body .hljs-string,
+.markdown-body .hljs-regexp,
+.markdown-body .hljs-addition {
+  color: #4a6339;
+}
+.markdown-body .hljs-number,
+.markdown-body .hljs-symbol,
+.markdown-body .hljs-bullet {
+  color: #85560a;
+}
+.markdown-body .hljs-title,
+.markdown-body .hljs-section,
+.markdown-body .hljs-name {
+  color: #2f4760;
+}
+.markdown-body .hljs-built_in,
+.markdown-body .hljs-type,
+.markdown-body .hljs-attr,
+.markdown-body .hljs-attribute,
+.markdown-body .hljs-variable,
+.markdown-body .hljs-template-variable {
+  color: #5f4470;
+}
+.markdown-body .hljs-meta,
+.markdown-body .hljs-deletion {
+  color: #8f2424;
+}
+.markdown-body .hljs-emphasis {
+  font-style: italic;
+}
+.markdown-body .hljs-strong {
+  font-weight: bold;
+}
+
+/* Tables: oxblood rules above, below and under the heading row, nothing between the columns. */
+
+.markdown-body table {
+  border-collapse: collapse;
+  margin: calc(1.2em * var(--md2pdf-space)) auto;
+  border-top: 1.5px solid var(--md2pdf-accent);
+  border-bottom: 1.5px solid var(--md2pdf-accent);
+}
+.markdown-body th,
+.markdown-body td {
+  padding: 0.35em 0.9em;
+  text-align: left;
+}
+.markdown-body td {
+  border-top: 0.5px solid var(--md2pdf-rule);
+}
+.markdown-body th {
+  font-weight: normal;
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  color: var(--md2pdf-accent);
+  border-bottom: 0.75px solid var(--md2pdf-accent);
+}
+.markdown-body tr {
+  break-inside: avoid;
+}
+
+/* Rules and images */
+
+.markdown-body hr {
+  border: 0;
+  margin: calc(1.4em * var(--md2pdf-space)) 0;
+}
+.markdown-body hr::after {
+  width: 9em;
+}
+
+.markdown-body img {
+  display: block;
+  max-width: 100%;
+  margin: calc(1em * var(--md2pdf-space)) auto;
+  break-inside: avoid;
+}
+
+/* Footnotes */
+
+.markdown-body hr.footnotes-sep {
+  display: none;
+}
+.markdown-body .footnotes {
+  margin-top: calc(2.5em * var(--md2pdf-space));
+  font-size: calc(10 / 12 * var(--md2pdf-font-size));
+  color: var(--md2pdf-muted);
+}
+.markdown-body .footnotes::before {
+  content: "";
+  display: block;
+  width: 30%;
+  border-top: 0.75px solid var(--md2pdf-accent);
+  margin-bottom: calc(0.8em * var(--md2pdf-space));
+  /* Keep the line on the page with the first footnote. */
+  break-after: avoid;
+}
+.markdown-body .footnotes ol {
+  padding-left: 1.2em;
+}
+.markdown-body .footnote-ref a,
+.markdown-body .footnote-backref {
+  color: var(--md2pdf-accent);
+}
+
+/* An Obsidian embed (![[Other note]]) that can't be shown: a muted placeholder. */
+.markdown-body .markdown-embed {
+  color: var(--md2pdf-muted);
+  font-style: italic;
+}
+
+/* <div class="page-break"></div> starts a new page. */
+.markdown-body .page-break {
+  break-after: page;
+}

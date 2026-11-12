@@ -1,0 +1,29 @@
+/* Gothic: the print-only rules (page margins, running headers and page numbers). Load after
+   ../gothic.css when printing; a page that only shows the document on screen leaves this out. */
+
+@page {
+  margin: 1in 1.1in 0.9in;
+  /* An empty top box stops browsers from adding their own date/title header. */
+  @top-center {
+    content: "";
+  }
+  /* Margin boxes don't see the document's variables, so these repeat gothic.css's body font and
+     accent. */
+  @bottom-center {
+    content: "— " counter(page) " —";
+    font-family: "md2pdf IM Fell English", "Iowan Old Style", Georgia, serif;
+    font-size: 11pt;
+    color: #7a1f1f;
+  }
+}
+@page :first {
+  @bottom-center {
+    content: "";
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}

@@ -28,6 +28,7 @@ const STYLES = {
   report: styleFiles('report'),
   resume: styleFiles('resume'),
   worksheet: styleFiles('worksheet'),
+  gothic: styleFiles('gothic'),
 };
 const FALLBACK_STYLE = 'github';
 
