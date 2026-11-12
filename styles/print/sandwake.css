@@ -1,0 +1,47 @@
+/* Sandwake: the print-only rules (page margins, running headers and page numbers). Load after
+   ../sandwake.css when printing; a page that only shows the document on screen leaves this out. */
+
+:root {
+  /* The document's first heading, for the running header; set by the renderer or the page showing it. */
+  --document-title: "";
+}
+
+/* Margin boxes don't see the document's variables, so these repeat sandwake.css's label font and
+   muted color. The title page has its own title, so it has no running header, and no folio. */
+@page {
+  margin: 1in 0.9in 0.9in;
+  @top-left {
+    content: var(--document-title);
+    font-family: "md2pdf Space Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 7.5pt;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #5e5140;
+  }
+  /* An empty box stops browsers from adding their own date/title header. */
+  @top-center {
+    content: "";
+  }
+  @bottom-right {
+    content: "Folio " counter(page, decimal-leading-zero);
+    font-family: "md2pdf Space Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 7.5pt;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #5e5140;
+  }
+}
+@page :first {
+  @top-left {
+    content: "";
+  }
+  @bottom-right {
+    content: "";
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}

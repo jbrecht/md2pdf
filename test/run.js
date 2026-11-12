@@ -155,7 +155,7 @@ function computedSpacing(htmlFile, dir) {
   return probeInChrome(probed, dir);
 }
 
-const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resume', 'worksheet', 'gothic'];
+const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resume', 'worksheet', 'gothic', 'sandwake'];
 
 // The CSS a page loads to show a style on screen, without its print rules.
 const screenCss = (style) =>
@@ -791,9 +791,9 @@ test('gothic style sets a drop cap only under a leading title, and a short parag
     const md = createRenderer({ hljs });
     const doc = (body) => `<article class="markdown-body" style="width: 500px">${md.render(body)}</article>`;
     writeFileSync(join(dir, 'cap.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss('gothic')}</style></head>
-<body>${doc('# Title\n\nShort.\n\nThe next paragraph starts at the margin.')}${doc('No title.')}${doc('Text.\n\n# Later title\n\nUnder a later title.')}${doc('# Title\n\n`code` starts this one.')}
+<body>${doc('# Title\n\nShort.\n\nThe next paragraph starts at the margin.')}${doc('No title.')}${doc('Text.\n\n# Later title\n\nUnder a later title.')}${doc('# Title\n\n`code` starts this one.')}${doc('# Title\n\n[`createRenderer`](https://example.com) builds it.')}${doc('# Title\n\n**`code`** first.')}${doc('# Title\n\n<kbd>Ctrl</kbd> + C copies.')}
 <script>
-  const [titled, untitled, later, coded] = document.querySelectorAll('.markdown-body');
+  const [titled, untitled, later, coded, linked, bolded, keyed] = document.querySelectorAll('.markdown-body');
   const font = (p) => getComputedStyle(p, '::first-letter').fontFamily;
   const next = titled.querySelectorAll('p')[1];
   const range = document.createRange();
@@ -804,13 +804,97 @@ test('gothic style sets a drop cap only under a leading title, and a short parag
     untitled: font(untitled.querySelector('p')),
     later: font(later.querySelectorAll('p')[1]),
     coded: font(coded.querySelector('p')),
+    linked: font(linked.querySelector('p')),
+    bolded: font(bolded.querySelector('p')),
+    keyed: font(keyed.querySelector('p')),
   };
 </script></body></html>`);
     const cap = probeInChrome(join(dir, 'cap.html'), dir);
     assert.match(cap.titled, /Grenze Gotisch/);
-    assert.doesNotMatch(cap.coded, /Grenze Gotisch/, 'a paragraph starting with code has a drop cap');
+    for (const start of ['coded', 'linked', 'bolded', 'keyed']) assert.doesNotMatch(cap[start], /Grenze Gotisch/, `a paragraph starting with ${start} code has a drop cap`);
     assert.doesNotMatch(cap.untitled, /Grenze Gotisch/);
     assert.doesNotMatch(cap.later, /Grenze Gotisch/);
+    assert.ok(Math.abs(cap.indent) < 1, `the paragraph after a short first one starts ${cap.indent}px from the margin`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('sandwake style prints with its bundled fonts', () => {
+  // One page, so it has no running header or folio, which are set in Space Mono too.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'one.md'), '# Title\n\nPlain, **bold**, *italic* and `code` text.\n\n## Section\n');
+    const r = run('-s', 'sandwake', join(dir, 'one.md'));
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, '');
+    assert.equal(pageCount(join(dir, 'one.pdf')), 1);
+    const fonts = pdfFonts(join(dir, 'one.pdf'));
+    for (const face of ['Michroma-Regular', 'Spectral-Regular', 'Spectral-SemiBold', 'Spectral-Italic', 'SpaceMono-Regular', 'SpaceMono-Bold']) assert.ok(fonts.includes(face), `${face} not in ${fonts}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("sandwake style numbers only the document's own titles as books", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const html = createRenderer({ hljs }).render('# Title\n\n## One\n\n> # Quoted\n\n> [!note]\n> # In a callout\n\n# Book two\n');
+    writeFileSync(join(dir, 'books.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss('sandwake')}</style></head>
+<body><article class="markdown-body">${html}</article>
+<script>
+  window.probeOut = [...document.querySelectorAll('h1')].map((h) => ({
+    text: h.textContent.trim(),
+    counts: getComputedStyle(h).counterIncrement,
+    sets: getComputedStyle(h).counterSet,
+    label: getComputedStyle(h, '::before').content,
+  }));
+</script></body></html>`);
+    const [title, quoted, callout, two] = probeInChrome(join(dir, 'books.html'), dir);
+    assert.match(title.counts, /md2pdf-book/);
+    assert.match(title.sets, /md2pdf-section 0/);
+    assert.equal(title.label, 'none', 'the first title has no book label');
+    for (const nested of [quoted, callout]) {
+      assert.equal(nested.counts, 'none', `${nested.text} counts as a book`);
+      assert.equal(nested.sets, 'none', `${nested.text} restarts the sections`);
+      assert.equal(nested.label, 'none', `${nested.text} has a book label`);
+    }
+    assert.match(two.counts, /md2pdf-book/);
+    assert.notEqual(two.label, 'none');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('sandwake style sets a drop cap only under a leading title, and a short paragraph holds it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const md = createRenderer({ hljs });
+    const doc = (body) => `<article class="markdown-body" style="width: 500px">${md.render(body)}</article>`;
+    writeFileSync(join(dir, 'cap.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss('sandwake')}</style></head>
+<body>${doc('# Title\n\nShort.\n\nThe next paragraph starts at the margin.')}${doc('No title.')}${doc('Text.\n\n# Later title\n\nUnder a later title.')}${doc('# Title\n\n`code` starts this one.')}${doc('# Title\n\n[`createRenderer`](https://example.com) builds it.')}${doc('# Title\n\n**`code`** first.')}${doc('# Title\n\n<kbd>Ctrl</kbd> + C copies.')}
+<script>
+  const [titled, untitled, later, coded, linked, bolded, keyed] = document.querySelectorAll('.markdown-body');
+  const font = (p) => getComputedStyle(p, '::first-letter').fontFamily;
+  const next = titled.querySelectorAll('p')[1];
+  const range = document.createRange();
+  range.selectNodeContents(next.firstChild);
+  window.probeOut = {
+    indent: range.getClientRects()[0].left - titled.getBoundingClientRect().left,
+    titled: font(titled.querySelector('p')),
+    untitled: font(untitled.querySelector('p')),
+    later: font(later.querySelectorAll('p')[1]),
+    coded: font(coded.querySelector('p')),
+    linked: font(linked.querySelector('p')),
+    bolded: font(bolded.querySelector('p')),
+    keyed: font(keyed.querySelector('p')),
+  };
+</script></body></html>`);
+    const cap = probeInChrome(join(dir, 'cap.html'), dir);
+    assert.match(cap.titled, /Michroma/);
+    for (const start of ['coded', 'linked', 'bolded', 'keyed']) assert.doesNotMatch(cap[start], /Michroma/, `a paragraph starting with ${start} code has a drop cap`);
+    assert.doesNotMatch(cap.untitled, /Michroma/);
+    assert.doesNotMatch(cap.later, /Michroma/);
     assert.ok(Math.abs(cap.indent) < 1, `the paragraph after a short first one starts ${cap.indent}px from the margin`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -834,6 +918,7 @@ for (const [style, marker] of [
   ['resume', /h1 \+ p/],
   ['worksheet', /md2pdf Andika/],
   ['gothic', /md2pdf Grenze Gotisch/],
+  ['sandwake', /md2pdf Michroma/],
 ]) {
   test(`${style} style renders with its own stylesheet`, () => {
     const dir = workspace();
