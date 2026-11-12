@@ -791,9 +791,9 @@ test('gothic style sets a drop cap only under a leading title, and a short parag
     const md = createRenderer({ hljs });
     const doc = (body) => `<article class="markdown-body" style="width: 500px">${md.render(body)}</article>`;
     writeFileSync(join(dir, 'cap.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss('gothic')}</style></head>
-<body>${doc('# Title\n\nShort.\n\nThe next paragraph starts at the margin.')}${doc('No title.')}${doc('Text.\n\n# Later title\n\nUnder a later title.')}
+<body>${doc('# Title\n\nShort.\n\nThe next paragraph starts at the margin.')}${doc('No title.')}${doc('Text.\n\n# Later title\n\nUnder a later title.')}${doc('# Title\n\n`code` starts this one.')}
 <script>
-  const [titled, untitled, later] = document.querySelectorAll('.markdown-body');
+  const [titled, untitled, later, coded] = document.querySelectorAll('.markdown-body');
   const font = (p) => getComputedStyle(p, '::first-letter').fontFamily;
   const next = titled.querySelectorAll('p')[1];
   const range = document.createRange();
@@ -803,10 +803,12 @@ test('gothic style sets a drop cap only under a leading title, and a short parag
     titled: font(titled.querySelector('p')),
     untitled: font(untitled.querySelector('p')),
     later: font(later.querySelectorAll('p')[1]),
+    coded: font(coded.querySelector('p')),
   };
 </script></body></html>`);
     const cap = probeInChrome(join(dir, 'cap.html'), dir);
     assert.match(cap.titled, /Grenze Gotisch/);
+    assert.doesNotMatch(cap.coded, /Grenze Gotisch/, 'a paragraph starting with code has a drop cap');
     assert.doesNotMatch(cap.untitled, /Grenze Gotisch/);
     assert.doesNotMatch(cap.later, /Grenze Gotisch/);
     assert.ok(Math.abs(cap.indent) < 1, `the paragraph after a short first one starts ${cap.indent}px from the margin`);
