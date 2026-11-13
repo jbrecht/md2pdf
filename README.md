@@ -95,6 +95,8 @@ A style can bundle fonts, so it looks the same on every computer:
 
 The CLI resolves a stylesheet's relative `url()`s against the stylesheet, and loads every declared font before printing, including one used only in a page header. `npm test` checks the file layout, the licence, the family names, `local()` and `font-display`.
 
+End the on-screen file with the rule the other styles end with, which turns off ligatures when Safari prints: Safari's PDFs copy a ligature as the wrong characters ("The" pastes as "!e"), while Chrome's, the CLI's and on-screen text are unaffected. It belongs in the on-screen file, not the print file, because a page that embeds a style prints without the print file. On a Mac with `swiftc`, `npm test` prints every style through WebKit and checks the copied text.
+
 The text of the document's first `#` heading (empty if there is none) is available to page margin boxes as `var(--document-title)`, e.g. `@top-left { content: var(--document-title); }`, as the `report` style does.
 
 A style declares the [shared variables](#variables) in its first rule, `:where(.markdown-body) { … }`, with a comment saying what each one does there, and uses them for every size, gap, color and font they name. Spacing follows two patterns: `line-height: calc(1 + 0.55 * var(--md2pdf-leading))` and `margin: calc(1.8em * var(--md2pdf-space)) 0 …`. `npm test` checks that each variable is declared and changes the document. Page margins aren't included: they stay in the style's `@page` rule, in `styles/print/<name>.css`.
