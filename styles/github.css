@@ -319,6 +319,10 @@
 .markdown-body hr.footnotes-sep {
   display: none;
 }
+.markdown-body .footnotes ol {
+  /* Room for numbers up to 99, which Safari sets further left than Chrome. */
+  padding-left: 2.4em;
+}
 
 /* An Obsidian embed (![[Other note]]) that can't be shown: a muted placeholder. */
 .markdown-body .markdown-embed {

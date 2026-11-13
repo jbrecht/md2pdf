@@ -343,7 +343,8 @@
   color: var(--md2pdf-muted);
 }
 .markdown-body .footnotes ol {
-  padding-left: 1.2em;
+  /* Room for numbers up to 99, which Safari sets further left than Chrome. */
+  padding-left: 2.2em;
 }
 .markdown-body .footnotes p {
   margin: 0;
