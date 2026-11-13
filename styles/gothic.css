@@ -15,9 +15,9 @@
   --md2pdf-leading: 1;
   --md2pdf-space: 1;
   /* Colors: --md2pdf-background the document's background; --md2pdf-text body text; --md2pdf-muted
-     secondary text; --md2pdf-accent h1, h2 and h4, the drop cap, links, list markers, quote bars,
-     tick boxes, caution callouts, table headings and rules, and the footnote rule (the leaf ornaments
-     stay oxblood); --md2pdf-rule thin rules and borders;
+     secondary text; --md2pdf-accent h1, h2 and h4, the drop cap, links, bold text, list markers,
+     quote bars, tick boxes, caution callouts, table headings and rules, and the footnote rule (the
+     leaf ornaments stay oxblood); --md2pdf-rule thin rules and borders;
      --md2pdf-surface code and callout backgrounds. */
   --md2pdf-background: #fff;
   --md2pdf-text: #1c1916;
@@ -35,8 +35,8 @@
 /* IM Fell English (Igino Marini) and Grenze Gotisch (Omnibus-Type), both under the SIL Open Font
    License; the licences are in fonts/im-fell-english/OFL.txt and fonts/grenze-gotisch/OFL.txt. Their
    latin subsets cover English and Western European languages (Basic Latin and Latin-1, plus œ and
-   €); other letters come from the fallbacks. IM Fell has no bold, so bold text is the browser's
-   thickening of the regular face. */
+   €); other letters come from the fallbacks. IM Fell has no bold, so bold text is set in color
+   instead (see Bold below). */
 @font-face {
   font-family: "md2pdf IM Fell English";
   font-weight: 400;
@@ -197,6 +197,19 @@
 }
 .markdown-body a.header-anchor {
   display: none;
+}
+
+/* Bold: oxblood at the weight around it, and body-text color inside text that's already oxblood or a
+   callout's color. IM Fell has no bold, and Safari fakes one by drawing each letter three times,
+   which puts every bold word in the PDF's text three times. */
+
+.markdown-body strong,
+.markdown-body b {
+  font-weight: inherit;
+  color: var(--md2pdf-accent);
+}
+.markdown-body :is(h1, h2, h4, a, th, .markdown-alert-title) :is(strong, b) {
+  color: var(--md2pdf-text);
 }
 
 /* Lists */
