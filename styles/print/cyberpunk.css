@@ -1,0 +1,92 @@
+/* Cyberpunk: the print-only rules (page margins, running headers and page numbers). Load after
+   ../cyberpunk.css when printing; a page that only shows the document on screen leaves this out. */
+
+:root {
+  /* The document's first heading, for the running header; set by the renderer or the page showing it. */
+  --document-title: "";
+}
+
+/* Margin boxes don't see the document's variables, so these repeat cyberpunk.css's label font and
+   its muted, teal and magenta colors. */
+@page {
+  margin: 1in 0.75in 0.9in;
+  @top-left {
+    content: var(--document-title);
+    vertical-align: bottom;
+    margin-bottom: 22pt;
+    padding-bottom: 7pt;
+    border-bottom: 0.75pt solid #007a8a;
+    font-family: "md2pdf JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.5pt;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #5a6878;
+  }
+  /* An empty box carries the header rule across the page and stops browsers adding their own header. */
+  @top-center {
+    content: "";
+    margin-bottom: 22pt;
+    border-bottom: 0.75pt solid #007a8a;
+  }
+  @top-right {
+    content: "// Eyes only";
+    vertical-align: bottom;
+    margin-bottom: 22pt;
+    padding-bottom: 7pt;
+    border-bottom: 0.75pt solid #007a8a;
+    font-family: "md2pdf JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.5pt;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #d4106a;
+  }
+  @bottom-left {
+    content: "// End of page";
+    vertical-align: top;
+    margin-top: 20pt;
+    padding-top: 7pt;
+    border-top: 0.75pt solid #007a8a;
+    font-family: "md2pdf JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.5pt;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #5a6878;
+  }
+  @bottom-center {
+    content: "";
+    margin-top: 20pt;
+    border-top: 0.75pt solid #007a8a;
+  }
+  @bottom-right {
+    content: "PG " counter(page, decimal-leading-zero) " / " counter(pages, decimal-leading-zero);
+    vertical-align: top;
+    margin-top: 20pt;
+    padding-top: 7pt;
+    border-top: 0.75pt solid #007a8a;
+    font-family: "md2pdf JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.5pt;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #5a6878;
+  }
+}
+/* The title panel replaces the header on the first page. */
+@page :first {
+  @top-left {
+    content: "";
+    border: 0;
+  }
+  @top-center {
+    border: 0;
+  }
+  @top-right {
+    content: "";
+    border: 0;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}

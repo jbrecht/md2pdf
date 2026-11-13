@@ -155,7 +155,7 @@ function computedSpacing(htmlFile, dir) {
   return probeInChrome(probed, dir);
 }
 
-const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resume', 'worksheet', 'gothic', 'sandwake', 'elvish'];
+const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resume', 'worksheet', 'gothic', 'sandwake', 'elvish', 'cyberpunk'];
 
 // The CSS a page loads to show a style on screen, without its print rules.
 const screenCss = (style) =>
@@ -954,6 +954,47 @@ test("elvish style sets a drop cap under the document's own # headings, and a sh
   }
 });
 
+test('cyberpunk style prints with its bundled fonts', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'one.md'), '# Title\n\nPlain, **bold**, *italic*, ***both*** and `code` text.\n\n## Section\n');
+    const r = run('-s', 'cyberpunk', join(dir, 'one.md'));
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, '');
+    const fonts = pdfFonts(join(dir, 'one.pdf'));
+    for (const face of ['ChakraPetch-Regular', 'ChakraPetch-Bold', 'ChakraPetch-Italic', 'ChakraPetch-BoldItalic', 'JetBrainsMono-Regular', 'JetBrainsMono-Bold']) assert.ok(fonts.includes(face), `${face} not in ${fonts}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("cyberpunk style numbers only the document's own ## sections", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const html = createRenderer({ hljs }).render('# Title\n\n## One\n\n> ## Quoted\n\n> [!note]\n> ## In a callout\n\n## Two\n');
+    writeFileSync(join(dir, 'sections.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss('cyberpunk')}</style></head>
+<body><article class="markdown-body">${html}</article>
+<script>
+  window.probeOut = [...document.querySelectorAll('h2')].map((h) => ({
+    text: h.textContent.trim(),
+    counts: getComputedStyle(h).counterIncrement,
+    label: getComputedStyle(h, '::before').content,
+  }));
+</script></body></html>`);
+    const [one, quoted, callout, two] = probeInChrome(join(dir, 'sections.html'), dir);
+    for (const section of [one, two]) {
+      assert.match(section.counts, /md2pdf-section/, `${section.text} isn't counted`);
+      assert.match(section.label, /counter\(md2pdf-section/, `${section.text} has no number`);
+    }
+    for (const nested of [quoted, callout]) {
+      assert.equal(nested.counts, 'none', `${nested.text} counts as a section`);
+      assert.equal(nested.label, 'none', `${nested.text} has a section number`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('classic style renders with its own stylesheet', () => {
   const dir = workspace();
   const r = run('-s', 'classic', '--html', join(dir, 'sample.md'));
@@ -973,6 +1014,7 @@ for (const [style, marker] of [
   ['gothic', /md2pdf Grenze Gotisch/],
   ['sandwake', /md2pdf Michroma/],
   ['elvish', /md2pdf Cormorant Unicase/],
+  ['cyberpunk', /md2pdf Chakra Petch/],
 ]) {
   test(`${style} style renders with its own stylesheet`, () => {
     const dir = workspace();

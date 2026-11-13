@@ -31,6 +31,7 @@ const STYLES = {
   gothic: styleFiles('gothic'),
   sandwake: styleFiles('sandwake'),
   elvish: styleFiles('elvish'),
+  cyberpunk: styleFiles('cyberpunk'),
 };
 const FALLBACK_STYLE = 'github';
 
