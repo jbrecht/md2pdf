@@ -155,7 +155,7 @@ function computedSpacing(htmlFile, dir) {
   return probeInChrome(probed, dir);
 }
 
-const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resume', 'worksheet', 'gothic', 'sandwake'];
+const STYLE_NAMES = ['github', 'classic', 'academic', 'modern', 'report', 'resume', 'worksheet', 'gothic', 'sandwake', 'elvish'];
 
 // The CSS a page loads to show a style on screen, without its print rules.
 const screenCss = (style) =>
@@ -901,6 +901,59 @@ test('sandwake style sets a drop cap only under a leading title, and a short par
   }
 });
 
+test('elvish style prints with its bundled fonts', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'one.md'), '# Title\n\nPlain, **bold**, *italic* and ***both*** text.\n\n## Section\n');
+    const r = run('-s', 'elvish', join(dir, 'one.md'));
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, '');
+    const fonts = pdfFonts(join(dir, 'one.pdf'));
+    for (const face of ['CormorantUnicase-SemiBold', 'CormorantGaramondLight-Medium', 'CormorantGaramondLight-MediumItalic', 'CormorantGaramondLight-Bold', 'CormorantGaramondLight-BoldItalic']) assert.ok(fonts.includes(face), `${face} not in ${fonts}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("elvish style sets a drop cap under the document's own # headings, and a short paragraph holds it", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const md = createRenderer({ hljs });
+    const doc = (body) => `<article class="markdown-body" style="width: 500px">${md.render(body)}</article>`;
+    writeFileSync(join(dir, 'cap.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss('elvish')}</style></head>
+<body>${doc('# Title\n\nShort.\n\nThe next paragraph starts at the margin.')}${doc('No title.')}${doc('Text.\n\n# Later title\n\nUnder a later title.')}${doc('> # Quoted\n>\n> Under a quoted title.')}${doc('# Title\n\n[A link](https://example.com) starts this one.')}${doc('# Title\n\n`code` starts this one.')}${doc('# Title\n\n[`createRenderer`](https://example.com) builds it.')}${doc('# Title\n\n**`code`** first.')}${doc('# Title\n\n<kbd>Ctrl</kbd> + C copies.')}
+<script>
+  const [titled, untitled, later, quoted, linkfirst, coded, linked, bolded, keyed] = document.querySelectorAll('.markdown-body');
+  const font = (p) => getComputedStyle(p, '::first-letter').fontFamily;
+  const next = titled.querySelectorAll('p')[1];
+  const range = document.createRange();
+  range.selectNodeContents(next.firstChild);
+  window.probeOut = {
+    indent: range.getClientRects()[0].left - titled.getBoundingClientRect().left,
+    titled: font(titled.querySelector('p')),
+    untitled: font(untitled.querySelector('p')),
+    later: font(later.querySelectorAll('p')[1]),
+    quoted: font(quoted.querySelector('p')),
+    linkfirst: font(linkfirst.querySelector('p')),
+    coded: font(coded.querySelector('p')),
+    linked: font(linked.querySelector('p')),
+    bolded: font(bolded.querySelector('p')),
+    keyed: font(keyed.querySelector('p')),
+  };
+</script></body></html>`);
+    const cap = probeInChrome(join(dir, 'cap.html'), dir);
+    assert.match(cap.titled, /Cormorant Unicase/);
+    assert.match(cap.later, /Cormorant Unicase/);
+    for (const start of ['coded', 'linked', 'bolded', 'keyed']) assert.doesNotMatch(cap[start], /Cormorant Unicase/, `a paragraph starting with ${start} code has a drop cap`);
+    assert.doesNotMatch(cap.linkfirst, /Cormorant Unicase/, 'a paragraph starting with a link has a drop cap, with the underline under it');
+    assert.doesNotMatch(cap.untitled, /Cormorant Unicase/);
+    assert.doesNotMatch(cap.quoted, /Cormorant Unicase/, 'a paragraph under a # heading in a quote has a drop cap');
+    assert.ok(Math.abs(cap.indent) < 1, `the paragraph after a short first one starts ${cap.indent}px from the margin`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('classic style renders with its own stylesheet', () => {
   const dir = workspace();
   const r = run('-s', 'classic', '--html', join(dir, 'sample.md'));
@@ -919,6 +972,7 @@ for (const [style, marker] of [
   ['worksheet', /md2pdf Andika/],
   ['gothic', /md2pdf Grenze Gotisch/],
   ['sandwake', /md2pdf Michroma/],
+  ['elvish', /md2pdf Cormorant Unicase/],
 ]) {
   test(`${style} style renders with its own stylesheet`, () => {
     const dir = workspace();

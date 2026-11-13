@@ -30,6 +30,7 @@ const STYLES = {
   worksheet: styleFiles('worksheet'),
   gothic: styleFiles('gothic'),
   sandwake: styleFiles('sandwake'),
+  elvish: styleFiles('elvish'),
 };
 const FALLBACK_STYLE = 'github';
 

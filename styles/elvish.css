@@ -1,0 +1,643 @@
+/* Elvish: a quiet, symmetrical manuscript, as if copied out in a house under the trees. White
+   paper, the unicase cut of Cormorant for the title and section headings and Cormorant Garamond for
+   text (both bundled), a gold star between two leafed sprigs above the title, leaves for bullets,
+   verse-like quotes and Roman numerals. */
+
+/* Variables a page can override, on .markdown-body itself: for all its documents, or for one with
+   <article class="markdown-body" style="--md2pdf-font-size: 12pt">. A value set on :root or another
+   ancestor doesn't reach the document. :where() gives these defaults no specificity, so the page's
+   rule wins wherever it comes. Every style uses the same names. */
+:where(.markdown-body) {
+  /* Size and spacing. --md2pdf-font-size is the body text size, an absolute length such as 13.5pt
+     or 18px; headings and smaller text scale with it. Cormorant is a small face, so the default is
+     larger than most styles'. --md2pdf-leading scales each line height's excess over 1, and
+     --md2pdf-space the vertical gaps between blocks; both are 1 as designed. */
+  --md2pdf-font-size: 13.5pt;
+  --md2pdf-leading: 1;
+  --md2pdf-space: 1;
+  /* Colors: --md2pdf-background the paper; --md2pdf-text body text, tick boxes and key outlines;
+     --md2pdf-muted secondary text: h6, footnotes, the quote callout and embed placeholders;
+     --md2pdf-accent the drop capital, h3, list numerals, table headings, footnote references and
+     highlighted text; --md2pdf-rule hairlines: table rows, inline code (outside links) and
+     code-block borders, the inner frame of callouts, the --- rule and the footnote rule;
+     --md2pdf-surface the background of code. The title, h1, h2, h4 and h5, links, quotes, the
+     note callout and the table's rules are a forest green of their own, and the ornaments
+     (sprigs, leaves and stars) keep their own colors. */
+  --md2pdf-background: #fff;
+  --md2pdf-text: #1f2e2a;
+  --md2pdf-muted: #56635d;
+  --md2pdf-accent: #7a5c12;
+  --md2pdf-rule: #8fa39a;
+  --md2pdf-surface: #eef1ea;
+  /* Fonts: --md2pdf-font body text and the smaller headings; --md2pdf-heading-font the title, h1,
+     h2 and the drop capital, in Cormorant's unicase cut; --md2pdf-code-font code and keys. */
+  --md2pdf-font: "md2pdf Cormorant Garamond", "Iowan Old Style", Palatino, Georgia, serif;
+  --md2pdf-heading-font: "md2pdf Cormorant Unicase", "md2pdf Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+  --md2pdf-code-font: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* Cormorant Unicase and Cormorant Garamond (the Cormorant Project Authors), both under the SIL Open
+   Font License; the licences are in fonts/cormorant-unicase/OFL.txt and fonts/cormorant-garamond/OFL.txt.
+   Their latin subsets cover English and Western European languages (Basic Latin and Latin-1, plus œ
+   and €); other letters come from the fallbacks. Body text is the medium weight, 500. */
+@font-face {
+  font-family: "md2pdf Cormorant Unicase";
+  font-weight: 600;
+  font-style: normal;
+  src: url("fonts/cormorant-unicase/cormorant-unicase-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "md2pdf Cormorant Garamond";
+  font-weight: 500;
+  font-style: normal;
+  src: url("fonts/cormorant-garamond/cormorant-garamond-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "md2pdf Cormorant Garamond";
+  font-weight: 500;
+  font-style: italic;
+  src: url("fonts/cormorant-garamond/cormorant-garamond-latin-500-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "md2pdf Cormorant Garamond";
+  font-weight: 700;
+  font-style: normal;
+  src: url("fonts/cormorant-garamond/cormorant-garamond-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "md2pdf Cormorant Garamond";
+  font-weight: 700;
+  font-style: italic;
+  src: url("fonts/cormorant-garamond/cormorant-garamond-latin-700-italic.woff2") format("woff2");
+}
+
+.markdown-body {
+  font-family: var(--md2pdf-font);
+  font-weight: 500;
+  background: var(--md2pdf-background);
+  font-size: var(--md2pdf-font-size);
+  line-height: calc(1 + 0.55 * var(--md2pdf-leading));
+  color: var(--md2pdf-text);
+  /* A long web address wraps at the margin instead of making Chrome shrink the page to fit it. */
+  overflow-wrap: break-word;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.markdown-body p {
+  margin: 0 0 calc(0.75em * var(--md2pdf-space));
+  text-wrap: pretty;
+  orphans: 3;
+  widows: 3;
+}
+
+/* Headings */
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 700;
+  /* Upright even inside an italic quote, as the unicase face has no italic; h4 and h6 set their own. */
+  font-style: normal;
+  line-height: calc(1 + 0.3 * var(--md2pdf-leading));
+  color: #2f5244;
+  break-after: avoid;
+}
+
+/* A later # heading: centred under a single star. */
+.markdown-body h1 {
+  font-family: var(--md2pdf-heading-font);
+  font-size: calc(22.5 / 13.5 * var(--md2pdf-font-size));
+  font-weight: 600;
+  line-height: calc(1 + 0.2 * var(--md2pdf-leading));
+  text-align: center;
+  text-wrap: balance;
+  margin: calc(1.8em * var(--md2pdf-space)) 0 calc(0.8em * var(--md2pdf-space));
+  /* The ornaments are blocks inside the heading; without this a page can break between them. */
+  break-inside: avoid;
+}
+.markdown-body h1::before {
+  content: "";
+  display: block;
+  height: 12px;
+  margin-bottom: calc(0.5em * var(--md2pdf-space));
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 0L10 6L16 8L10 10L8 16L6 10L0 8L6 6Z' fill='%23b8923a'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
+}
+
+/* The title: the first heading, under a gold star between two leafed sprigs, with a small rule
+   beneath. */
+.markdown-body > h1:first-child {
+  font-size: calc(28.5 / 13.5 * var(--md2pdf-font-size));
+  margin: 0 0 calc(0.65em * var(--md2pdf-space));
+}
+.markdown-body > h1:first-child::before {
+  height: 28px;
+  margin-bottom: calc(0.35em * var(--md2pdf-space));
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8 0 256 28'%3E%3Cg%3E%3Cpath d='M136 14Q184 5 232 13' fill='none' stroke='%232f5244' stroke-width='1.2'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%232f5244' transform='translate(152.3 11.4) rotate(-45)'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%235e8573' transform='translate(170.6 9.7) rotate(40)'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%232f5244' transform='translate(188.8 9.2) rotate(-45)'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%235e8573' transform='translate(207 10) rotate(40)'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%232f5244' transform='translate(224.3 11.8) rotate(-40)'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%232f5244' transform='translate(232 13) rotate(12)'/%3E%3C/g%3E%3Cg transform='translate(240 0) scale(-1 1)'%3E%3Cpath d='M136 14Q184 5 232 13' fill='none' stroke='%232f5244' stroke-width='1.2'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%232f5244' transform='translate(152.3 11.4) rotate(-45)'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%235e8573' transform='translate(170.6 9.7) rotate(40)'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%232f5244' transform='translate(188.8 9.2) rotate(-45)'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%235e8573' transform='translate(207 10) rotate(40)'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%232f5244' transform='translate(224.3 11.8) rotate(-40)'/%3E%3Cpath d='M0 0C4-5 11-5 16 0C11 5 4 5 0 0Z' fill='%232f5244' transform='translate(232 13) rotate(12)'/%3E%3C/g%3E%3Cpath d='M120 6L121.2 12.8L128 14L121.2 15.2L120 22L118.8 15.2L112 14L118.8 12.8Z' fill='%23d9be78' transform='rotate(45 120 14)'/%3E%3Cpath d='M120 1L122 12L133 14L122 16L120 27L118 16L107 14L118 12Z' fill='%23b8923a'/%3E%3Ccircle cx='120' cy='14' r='1.6' fill='%23fff'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.markdown-body > h1:first-child::after {
+  content: "";
+  display: block;
+  height: 10px;
+  margin-top: calc(0.45em * var(--md2pdf-space));
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 264 10'%3E%3Cpath d='M0 5H120M144 5H264' stroke='%238fa39a'/%3E%3Cpath d='M132 0L137 5L132 10L127 5Z' fill='%23b8923a'/%3E%3C/svg%3E") center / 264px 10px no-repeat;
+}
+
+/* Sections: centred, with a leaf on a short stem at either side. */
+.markdown-body h2 {
+  font-family: var(--md2pdf-heading-font);
+  font-size: calc(17.25 / 13.5 * var(--md2pdf-font-size));
+  font-weight: 600;
+  text-align: center;
+  text-wrap: balance;
+  margin: calc(1.6em * var(--md2pdf-space)) 0 calc(0.6em * var(--md2pdf-space));
+}
+.markdown-body h2::before,
+.markdown-body h2::after {
+  content: "";
+  display: inline-block;
+  width: 34px;
+  height: 10px;
+  vertical-align: 0.1em;
+}
+.markdown-body h2::before {
+  margin-right: 0.6em;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 10'%3E%3Cpath d='M0 5H16' stroke='%238fa39a'/%3E%3Cpath d='M18 5C22 0 30 0 34 5C30 10 22 10 18 5Z' fill='%235e8573'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.markdown-body h2::after {
+  margin-left: 0.6em;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 10'%3E%3Cpath d='M18 5H34' stroke='%238fa39a'/%3E%3Cpath d='M16 5C12 0 4 0 0 5C4 10 12 10 16 5Z' fill='%235e8573'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.markdown-body h3 {
+  font-size: calc(11.25 / 13.5 * var(--md2pdf-font-size));
+  line-height: calc(1 + 0.5 * var(--md2pdf-leading));
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--md2pdf-accent);
+  margin: calc(2em * var(--md2pdf-space)) 0 calc(0.6em * var(--md2pdf-space));
+}
+.markdown-body h4 {
+  font-size: calc(14.5 / 13.5 * var(--md2pdf-font-size));
+  font-style: italic;
+  margin: calc(1.3em * var(--md2pdf-space)) 0 calc(0.35em * var(--md2pdf-space));
+}
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: var(--md2pdf-font-size);
+  margin: calc(1.2em * var(--md2pdf-space)) 0 calc(0.3em * var(--md2pdf-space));
+}
+.markdown-body h6 {
+  font-weight: 500;
+  font-style: italic;
+  color: var(--md2pdf-muted);
+}
+
+/* The paragraph straight after the title or a later # heading opens with a capital sunk three
+   lines, unless its first element is a link, code or a key: a link's underline would run under the
+   capital. Text before that element doesn't count, so "See [the docs](…)" gets no capital either.
+   flow-root keeps a short paragraph from letting the next block wrap around the capital. Chrome ignores a margin on the sunk letter, so the gap is padding,
+   in body-text units. */
+.markdown-body > h1 + p:not(:has(> a:first-child)):not(:has(> code:first-child)):not(:has(> kbd:first-child)):not(:has(> :first-child > code:first-child)):not(:has(> :first-child > kbd:first-child)) {
+  display: flow-root;
+}
+.markdown-body > h1 + p:not(:has(> a:first-child)):not(:has(> code:first-child)):not(:has(> kbd:first-child)):not(:has(> :first-child > code:first-child)):not(:has(> :first-child > kbd:first-child))::first-letter {
+  -webkit-initial-letter: 3;
+  initial-letter: 3;
+  padding-right: calc(0.2 * var(--md2pdf-font-size));
+  font-family: var(--md2pdf-heading-font);
+  font-weight: 600;
+  color: var(--md2pdf-accent);
+}
+/* Firefox can't sink a letter: a raised capital instead. */
+@supports not ((initial-letter: 3) or (-webkit-initial-letter: 3)) {
+  .markdown-body > h1 + p:not(:has(> a:first-child)):not(:has(> code:first-child)):not(:has(> kbd:first-child)):not(:has(> :first-child > code:first-child)):not(:has(> :first-child > kbd:first-child))::first-letter {
+    font-size: 2.4em;
+    line-height: 1;
+  }
+}
+
+/* Links */
+
+.markdown-body a {
+  color: #2f5244;
+  text-decoration: underline;
+  text-decoration-thickness: 0.5pt;
+  text-underline-offset: 2pt;
+}
+.markdown-body a.header-anchor {
+  display: none;
+}
+/* Code in a link: its box is drawn in the link's color, and as an inline-block it doesn't take the
+   link's underline, which would run through the box. The rest of the link stays underlined. */
+.markdown-body a > code {
+  display: inline-block;
+  /* An inline-block can't shrink below its longest word; these let a long one wrap inside it. */
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.markdown-body a:has(> code) > code {
+  border-color: currentColor;
+}
+.markdown-body .footnote-ref a {
+  font-style: italic;
+  color: var(--md2pdf-accent);
+  text-decoration: none;
+}
+
+/* Lists: leaves for bullets, paler when nested, and italic Roman numerals. */
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0 0 calc(0.75em * var(--md2pdf-space));
+  padding-left: 1.5em;
+}
+.markdown-body ol {
+  padding-left: 2em;
+  /* Safari ignores content on ::marker, so the numbering is set here too. */
+  list-style-type: lower-roman;
+}
+.markdown-body li ol {
+  list-style-type: lower-alpha;
+}
+.markdown-body li {
+  margin: calc(0.15em * var(--md2pdf-space)) 0;
+}
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin: calc(0.15em * var(--md2pdf-space)) 0 0;
+}
+.markdown-body ul {
+  list-style-type: none;
+}
+.markdown-body ul > li {
+  position: relative;
+}
+.markdown-body ul > li:not(.task-list-item)::before {
+  content: "";
+  position: absolute;
+  top: 0.58em;
+  left: -1.45em;
+  width: 0.78em;
+  height: 0.45em;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 8'%3E%3Cpath d='M0 4C3 0 10 0 14 4C10 8 3 8 0 4Z' fill='%232f5244'/%3E%3C/svg%3E") center / contain no-repeat;
+  transform: rotate(-20deg);
+}
+.markdown-body li ul > li:not(.task-list-item)::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 8'%3E%3Cpath d='M0 4C3 0 10 0 14 4C10 8 3 8 0 4Z' fill='%235e8573'/%3E%3C/svg%3E");
+}
+.markdown-body ol > li::marker {
+  content: counter(list-item, lower-roman) ".\a0";
+  font-style: italic;
+  color: var(--md2pdf-accent);
+}
+.markdown-body li ol > li::marker {
+  content: counter(list-item, lower-alpha) ".\a0";
+}
+/* Square boxes drawn here at the text's size: the browser's own are greyed out, as they're disabled. */
+.markdown-body .task-list-item input {
+  appearance: none;
+  font-size: inherit;
+  width: 0.8em;
+  height: 0.8em;
+  margin: 0 0.55em 0.15em -1.35em;
+  vertical-align: middle;
+  border: 1.5px solid var(--md2pdf-text);
+  border-radius: 0;
+  background: var(--md2pdf-background);
+}
+.markdown-body .task-list-item input:checked {
+  background: var(--md2pdf-text) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.2L7 11L12 5' fill='none' stroke='%23fff' stroke-width='1.8'/%3E%3C/svg%3E") center / 100% no-repeat;
+}
+
+/* Emphasis */
+
+.markdown-body strong {
+  font-weight: 700;
+}
+.markdown-body mark {
+  padding: 0 0.15em;
+  background: color-mix(in srgb, var(--md2pdf-accent) 22%, var(--md2pdf-background));
+  color: inherit;
+}
+
+/* Quotes: verse, centred in italics between two stars. End a line with two spaces or a backslash
+   to keep a poem's line breaks. */
+
+.markdown-body blockquote {
+  margin: calc(1.4em * var(--md2pdf-space)) 0;
+  padding: 0 2em;
+  font-size: 1.06em;
+  font-style: italic;
+  text-align: center;
+  text-wrap: balance;
+  color: #2f5244;
+  break-inside: avoid;
+}
+.markdown-body blockquote::before,
+.markdown-body blockquote::after {
+  content: "";
+  display: block;
+  height: 12px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 0L10 6L16 8L10 10L8 16L6 10L0 8L6 6Z' fill='%23b8923a'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
+}
+.markdown-body blockquote::before {
+  margin-bottom: calc(0.5em * var(--md2pdf-space));
+  break-after: avoid;
+}
+.markdown-body blockquote::after {
+  margin-top: calc(0.5em * var(--md2pdf-space));
+}
+.markdown-body blockquote > :first-child {
+  margin-top: 0;
+}
+/* The quote's own star stands over a heading at its top. */
+.markdown-body blockquote > h1:first-child::before {
+  display: none;
+}
+.markdown-body blockquote blockquote {
+  font-size: 1em;
+}
+.markdown-body blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* Callouts (GitHub alerts and Obsidian callouts): a double-ruled box, the outer line and the title
+   in the callout's color. */
+
+.markdown-body .markdown-alert {
+  --md2pdf-callout: #2f5244;
+  margin: calc(1.4em * var(--md2pdf-space)) 0;
+  padding: calc(0.6em + 3.75pt) calc(1em + 3.75pt) calc(0.7em + 3.75pt);
+  border: 0.75pt solid var(--md2pdf-callout);
+  /* The inner frame, 3pt inside the border. It stays inside the box: outside, Chrome prints its top
+     edge at the foot of the previous page when the callout moves to the next. An inset box-shadow
+     prints unevenly from Firefox. */
+  outline: 0.75pt solid var(--md2pdf-rule);
+  outline-offset: -4.5pt;
+  break-inside: avoid;
+}
+.markdown-body .markdown-alert-tip {
+  --md2pdf-callout: #3d6b1f;
+}
+.markdown-body .markdown-alert-important {
+  --md2pdf-callout: #5a3a7a;
+}
+.markdown-body .markdown-alert-warning {
+  --md2pdf-callout: #7a5c12;
+}
+.markdown-body .markdown-alert-caution {
+  --md2pdf-callout: #7a2338;
+}
+.markdown-body .markdown-alert-quote {
+  --md2pdf-callout: var(--md2pdf-muted);
+}
+.markdown-body .markdown-alert-title {
+  margin-bottom: calc(0.25em * var(--md2pdf-space));
+  color: var(--md2pdf-callout);
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.markdown-body .markdown-alert-title .octicon {
+  margin-right: 0.7em;
+  vertical-align: -0.12em;
+  width: 1.1em;
+  height: 1.1em;
+  fill: currentColor;
+}
+.markdown-body .markdown-alert-title + * {
+  margin-top: calc(0.6em * var(--md2pdf-space));
+}
+.markdown-body .markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
+/* Code: plain and quiet, on a slightly darker leaf of the paper. */
+
+.markdown-body code,
+.markdown-body kbd {
+  font-family: var(--md2pdf-code-font);
+  font-size: 0.72em;
+  font-style: normal;
+  font-weight: 400;
+}
+.markdown-body :not(pre) > code {
+  padding: 0.1em 0.4em;
+  border: 0.75pt solid var(--md2pdf-rule);
+  background: var(--md2pdf-surface);
+}
+.markdown-body kbd {
+  padding: 0.1em 0.45em;
+  border: 0.75pt solid var(--md2pdf-text);
+  border-bottom-width: 1.5pt;
+}
+.markdown-body pre {
+  margin: 0 0 calc(1.1em * var(--md2pdf-space));
+  padding: 0.9em 1.3em;
+  border-top: 0.75pt solid var(--md2pdf-rule);
+  border-bottom: 0.75pt solid var(--md2pdf-rule);
+  background: var(--md2pdf-surface);
+  line-height: calc(1 + 0.45 * var(--md2pdf-leading));
+  white-space: pre-wrap;
+  word-break: break-word;
+  break-inside: avoid;
+}
+.markdown-body pre code {
+  font-size: calc(9.75 / 13.5 * var(--md2pdf-font-size));
+}
+/* A highlight.js theme on the host page styles .hljs too; keep code blocks this style's own. */
+.markdown-body pre code.hljs {
+  display: inline;
+  overflow: visible;
+  padding: 0;
+  color: inherit;
+  background: none;
+}
+/* And its tokens: this outranks a theme's token rules, and this style's colors come after it. */
+.markdown-body [class*="hljs-"] {
+  color: inherit;
+  background: none;
+  font-style: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+
+.markdown-body .hljs-comment,
+.markdown-body .hljs-quote {
+  color: #56635d;
+  font-style: italic;
+}
+.markdown-body .hljs-keyword,
+.markdown-body .hljs-selector-tag,
+.markdown-body .hljs-literal,
+.markdown-body .hljs-doctag {
+  color: #2f5244;
+  font-weight: 700;
+}
+.markdown-body .hljs-string,
+.markdown-body .hljs-regexp,
+.markdown-body .hljs-addition {
+  color: #7a5c12;
+}
+.markdown-body .hljs-number,
+.markdown-body .hljs-symbol,
+.markdown-body .hljs-bullet {
+  color: #7a2338;
+}
+.markdown-body .hljs-title,
+.markdown-body .hljs-section,
+.markdown-body .hljs-name {
+  color: #2f4a7a;
+}
+.markdown-body .hljs-built_in,
+.markdown-body .hljs-type,
+.markdown-body .hljs-attr,
+.markdown-body .hljs-attribute,
+.markdown-body .hljs-variable,
+.markdown-body .hljs-template-variable {
+  color: #5a3a7a;
+}
+.markdown-body .hljs-meta,
+.markdown-body .hljs-deletion {
+  color: #8a3b1c;
+}
+.markdown-body .hljs-emphasis {
+  font-style: italic;
+}
+.markdown-body .hljs-strong {
+  font-weight: bold;
+}
+
+/* Math */
+
+.markdown-body .katex {
+  font-size: 0.95em;
+}
+.markdown-body .katex-display {
+  margin: calc(0.9em * var(--md2pdf-space)) 0;
+}
+
+/* Tables: a double rule above and below, small capital headings, hairlines between rows. */
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: calc(1.1em * var(--md2pdf-space)) 0 calc(1.3em * var(--md2pdf-space));
+  border-top: 2.25pt double #2f5244;
+  border-bottom: 2.25pt double #2f5244;
+  font-size: calc(12.75 / 13.5 * var(--md2pdf-font-size));
+  line-height: calc(1 + 0.4 * var(--md2pdf-leading));
+  font-style: normal;
+  text-align: left;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.markdown-body th,
+.markdown-body td {
+  padding: 0.4em 0.7em;
+  text-align: left;
+  vertical-align: top;
+}
+.markdown-body th:first-child,
+.markdown-body td:first-child {
+  padding-left: 0;
+}
+.markdown-body th:last-child,
+.markdown-body td:last-child {
+  padding-right: 0;
+}
+.markdown-body th {
+  padding-top: 0.75em;
+  padding-bottom: 0.6em;
+  /* The cells' side padding at the table's text size, so the smaller headings line up with their
+     columns; 0.76 is the headings' font-size below. */
+  padding-left: calc(0.7em / 0.76);
+  padding-right: calc(0.7em / 0.76);
+  vertical-align: bottom;
+  border-bottom: 0.75pt solid #2f5244;
+  font-size: 0.76em;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--md2pdf-accent);
+}
+.markdown-body tr:not(:last-child) > td {
+  border-bottom: 0.75pt solid color-mix(in srgb, var(--md2pdf-rule) 50%, var(--md2pdf-background));
+}
+.markdown-body tr {
+  break-inside: avoid;
+}
+
+/* Rules, images and diagrams */
+
+/* A gold star between two leaves, on a hairline. */
+.markdown-body hr {
+  height: 20px;
+  /* Firefox otherwise splits the ornament across pages. */
+  break-inside: avoid;
+  margin: calc(1.5em * var(--md2pdf-space)) 0;
+  border: 0;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 20'%3E%3Cpath d='M0 0C6-8 18-8 26 0C18 8 6 8 0 0Z' fill='%235e8573' transform='translate(26 10) rotate(180) scale(.7)'/%3E%3Cpath d='M0 0C6-8 18-8 26 0C18 8 6 8 0 0Z' fill='%235e8573' transform='translate(54 10) scale(.7)'/%3E%3Cpath d='M40 2L42 8L48 10L42 12L40 18L38 12L32 10L38 8Z' fill='%23b8923a'/%3E%3C/svg%3E") center / 80px 20px no-repeat,
+    linear-gradient(var(--md2pdf-rule), var(--md2pdf-rule)) left center / calc(50% - 40px) 0.75pt no-repeat,
+    linear-gradient(var(--md2pdf-rule), var(--md2pdf-rule)) right center / calc(50% - 40px) 0.75pt no-repeat;
+}
+
+.markdown-body img {
+  display: block;
+  max-width: 100%;
+  margin: calc(1.2em * var(--md2pdf-space)) auto;
+  break-inside: avoid;
+}
+
+.markdown-body .mermaid-diagram {
+  margin: calc(1.4em * var(--md2pdf-space)) 0;
+}
+
+/* Footnotes */
+
+.markdown-body hr.footnotes-sep {
+  display: none;
+}
+.markdown-body .footnotes {
+  margin-top: calc(2.2em * var(--md2pdf-space));
+  padding-top: 0.7em;
+  border-top: 0.75pt solid var(--md2pdf-rule);
+  font-size: calc(10.5 / 13.5 * var(--md2pdf-font-size));
+  color: var(--md2pdf-muted);
+}
+/* Safari sets the numbers further left than Chrome; less room than this clips them. */
+.markdown-body .footnotes ol {
+  padding-left: 2em;
+  list-style-type: decimal;
+}
+/* Upright, so the old-style figure isn't lost at this size. */
+.markdown-body .footnotes ol > li::marker {
+  content: counter(list-item) "\a0\a0";
+  font-style: normal;
+}
+.markdown-body .footnotes li {
+  margin: calc(0.15em * var(--md2pdf-space)) 0;
+}
+.markdown-body .footnotes p {
+  margin: 0;
+}
+.markdown-body .footnotes .footnote-backref {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* An Obsidian embed (![[Other note]]) that can't be shown: a muted placeholder. */
+.markdown-body .markdown-embed {
+  color: var(--md2pdf-muted);
+  font-style: italic;
+}
+
+/* <div class="page-break"></div> starts a new page. */
+.markdown-body .page-break {
+  break-after: page;
+}
