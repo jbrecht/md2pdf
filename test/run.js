@@ -1262,6 +1262,74 @@ test('print rules stay out of the on-screen styles', () => {
   }
 });
 
+test('every style turns off ligatures when Safari prints', () => {
+  const rule = /@media print \{\s*@supports \(font: -apple-system-body\) \{\s*\.markdown-body \{\s*font-feature-settings: "liga" 0, "clig" 0;/;
+  for (const style of STYLE_NAMES) assert.match(readFileSync(join(ROOT, 'styles', `${style}.css`), 'utf8'), rule, style);
+});
+
+// Safari's print dialog writes a ligature into the PDF as filler characters ("The" copies as "!e") or as a
+// presentation form ("ﬃ"). WebKit's print path, which Safari uses, shows the same without Safari.
+// xcode-select first: without the command line tools, running swiftc opens an install dialog.
+const swiftc = process.platform === 'darwin' && spawnSync('xcode-select', ['-p']).status === 0 && spawnSync('swiftc', ['--version']).status === 0;
+test('text copied from a Safari-printed PDF has no ligatures in any style', { skip: !swiftc && 'needs macOS and swiftc' }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const words = 'The first flowers affixed office waffles Theft';
+    writeFileSync(join(dir, 'doc.md'), `# ${words}
+
+${words} opening.
+
+## ${words}
+
+### ${words}
+
+#### ${words}
+
+${words}. *${words}.* **${words}.** [${words}](https://example.com). \`${words}\`
+
+> ${words}.
+
+> [!NOTE] ${words}
+> ${words}.
+
+- ${words}
+
+| ${words} | ${words} |
+|---|---|
+| ${words} | ${words} |
+
+Footnote.[^1]
+
+[^1]: ${words}.
+`);
+    // Each page must copy the same as a reference print with every ligature forced off.
+    const pages = STYLE_NAMES.flatMap((style) => {
+      mkdirSync(join(dir, style));
+      const r = run('-s', style, '--html', '-o', join(dir, style, 'doc.pdf'), join(dir, 'doc.md'));
+      assert.equal(r.status, 0, r.stderr);
+      const html = readFileSync(join(dir, style, 'doc.html'), 'utf8');
+      const off = '<style>.markdown-body, .markdown-body * { font-feature-settings: "liga" 0, "clig" 0 !important; }</style></head>';
+      writeFileSync(join(dir, style, 'reference.html'), html.replace('</head>', off));
+      return [join(dir, style, 'doc.html'), join(dir, style, 'reference.html')];
+    });
+    execFileSync('swiftc', ['-O', join(ROOT, 'test', 'webkit-print.swift'), '-o', join(dir, 'webkit-print')], { stdio: 'pipe' });
+    execFileSync(join(dir, 'webkit-print'), pages, { stdio: 'pipe', timeout: 120_000 });
+    // Line breaks can move when ligatures change a word's width, so compare without whitespace.
+    const text = (style, name) => readFileSync(join(dir, style, `${name}.webkit.txt`), 'utf8').replace(/\s+/g, '');
+    for (const style of STYLE_NAMES) {
+      const [copied, expected] = [text(style, 'doc'), text(style, 'reference')];
+      // Filler characters start at "!"; presentation forms are U+FB00 onwards.
+      assert.doesNotMatch(expected, /[!-+ﬀ-ﭏ]/, `${style}: the reference copies its ligatures wrong`);
+      assert.ok(expected.toLowerCase().includes(words.toLowerCase().replaceAll(' ', '')), `${style}: the reference copies the words`);
+      const found = [...copied].findIndex((c, i) => c !== [...expected][i]);
+      const at = found === -1 ? [...copied].length : found;
+      assert.ok(copied === expected, `${style} copies "${[...copied].slice(Math.max(0, at - 20), at + 20).join('')}" where the source has "${[...expected].slice(Math.max(0, at - 20), at + 20).join('')}"`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('the demo loads every renderer dependency, at the installed version', () => {
   const page = readFileSync(join(ROOT, 'demo', 'index.html'), 'utf8');
   const { imports } = JSON.parse(page.match(/<script type="importmap">([^]*?)<\/script>/)[1]);
@@ -1768,9 +1836,8 @@ test('--list-styles marks github as the default when no config exists', () => {
   const r = run('--list-styles');
   assert.equal(r.status, 0);
   assert.match(r.stdout, /^\* github$/m);
-  for (const style of STYLE_NAMES.filter((s) => s !== 'github')) {
-    assert.match(r.stdout, new RegExp(`^  ${style}$`, 'm'));
-  }
+  // Exactly STYLE_NAMES, so a new style can't miss the tests that run once per style.
+  assert.deepEqual(r.stdout.match(/^. (\S+)$/gm).map((line) => line.slice(2)).sort(), [...STYLE_NAMES].sort());
 });
 
 test('--set-style changes the default used for conversions', () => {

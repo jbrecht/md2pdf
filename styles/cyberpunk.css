@@ -692,3 +692,14 @@
 .markdown-body .page-break {
   break-after: page;
 }
+
+/* Safari's PDFs copy a ligature as the wrong characters ("The" pastes as "!e", "ffi" as "ﬃ"), so it
+   prints without them. An element's own font-feature-settings or `font` shorthand undoes this; set
+   its features with font-variant-* instead. */
+@media print {
+  @supports (font: -apple-system-body) {
+    .markdown-body {
+      font-feature-settings: "liga" 0, "clig" 0;
+    }
+  }
+}
