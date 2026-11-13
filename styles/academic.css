@@ -383,7 +383,8 @@
   break-after: avoid;
 }
 .markdown-body .footnotes ol {
-  padding-left: 1.4em;
+  /* Room for numbers up to 99, which Safari sets further left than Chrome. */
+  padding-left: 2em;
 }
 .markdown-body .footnotes p + p {
   text-indent: 0;

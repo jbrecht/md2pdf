@@ -520,8 +520,8 @@
   break-after: avoid;
 }
 .markdown-body .footnotes ol {
-  /* Room for the numbers, which Safari sets further left than Chrome. */
-  padding-left: 2em;
+  /* Room for numbers up to 99, which Safari sets further left than Chrome. */
+  padding-left: 2.4em;
 }
 .markdown-body .footnote-ref a,
 .markdown-body .footnote-backref {
