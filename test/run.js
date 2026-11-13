@@ -820,6 +820,38 @@ test('gothic style sets a drop cap only under a leading title, and a short parag
   }
 });
 
+test('gothic style sets bold in a color of its own at the weight around it, never a faked bold', () => {
+  // IM Fell has no bold; Safari fakes one by drawing the letters three times, tripling the PDF's text.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const md = createRenderer({ hljs });
+    writeFileSync(join(dir, 'bold.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss('gothic')}</style></head>
+<body><article class="markdown-body">${md.render([
+      'Its **own** counsel, <b>kept</b>, [the **door**](https://example.com).',
+      '# A **bold** title', '## A **bold** section', '### A **bold** subsection', '#### A **bold** aside',
+      '| **Name** |\n|---|\n| x |',
+      '> [!note] Is it **done**?\n> Not yet.',
+    ].join('\n\n'))}</article>
+<script>
+  const look = (sel) => { const s = getComputedStyle(document.querySelector(sel)); return { weight: s.fontWeight, color: s.color }; };
+  window.probeOut = Object.fromEntries(Object.entries({
+    strong: 'p > strong', b: 'p > b', link: 'a strong', h1: 'h1 strong', h2: 'h2 strong', h3: 'h3 strong', h4: 'h4 strong', th: 'th strong',
+    title: '.markdown-alert-title strong',
+  }).map(([what, sel]) => [what, look(sel)]));
+</script></body></html>`);
+    const bold = probeInChrome(join(dir, 'bold.html'), dir);
+    const [oxblood, ink] = ['rgb(122, 31, 31)', 'rgb(28, 25, 22)'];
+    assert.deepEqual(bold.strong, { weight: '400', color: oxblood });
+    assert.deepEqual(bold.b, { weight: '400', color: oxblood });
+    assert.deepEqual(bold.h3, { weight: '600', color: oxblood });
+    // Inside text that's already oxblood or a callout's color, bold is set in the body text's color.
+    for (const what of ['h1', 'h2']) assert.deepEqual(bold[what], { weight: '600', color: ink }, what);
+    for (const what of ['h4', 'link', 'th', 'title']) assert.deepEqual(bold[what], { weight: '400', color: ink }, what);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('sandwake style prints with its bundled fonts', () => {
   // One page, so it has no running header or folio, which are set in Space Mono too.
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
