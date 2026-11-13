@@ -1,0 +1,69 @@
+/* Elvish: the print-only rules (page margins, running headers and page numbers). Load after
+   ../elvish.css when printing; a page that only shows the document on screen leaves this out. */
+
+:root {
+  /* The document's first heading, for the running header; set by the renderer or the page showing it. */
+  --document-title: "";
+}
+
+/* Margin boxes don't see the document's variables, so these repeat elvish.css's fonts, its muted and
+   rule colors and the stars' gold. */
+@page {
+  margin: 1.1in 1.25in 1in;
+  /* Empty boxes carry the header rule across the page and stop browsers adding their own header. */
+  @top-left {
+    content: "";
+    margin-bottom: 26pt;
+    border-bottom: 0.75pt solid #8fa39a;
+  }
+  /* The title in capitals between two stars, in the unicase face: Chrome won't turn on lining
+     figures in a margin box, and Cormorant Garamond's old-style figures sink among capitals. */
+  @top-center {
+    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 16 16'%3E%3Cpath d='M8 0L10 6L16 8L10 10L8 16L6 10L0 8L6 6Z' fill='%23b8923a'/%3E%3C/svg%3E") "\a0\a0\a0" var(--document-title) "\a0\a0\a0" url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 16 16'%3E%3Cpath d='M8 0L10 6L16 8L10 10L8 16L6 10L0 8L6 6Z' fill='%23b8923a'/%3E%3C/svg%3E");
+    vertical-align: bottom;
+    margin-bottom: 26pt;
+    padding-bottom: 7pt;
+    border-bottom: 0.75pt solid #8fa39a;
+    font-family: "md2pdf Cormorant Unicase", "md2pdf Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+    font-size: 9.75pt;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #56635d;
+  }
+  @top-right {
+    content: "";
+    margin-bottom: 26pt;
+    border-bottom: 0.75pt solid #8fa39a;
+  }
+  /* The page number in italic Roman numerals between two stars. */
+  @bottom-center {
+    content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 16 16'%3E%3Cpath d='M8 0L10 6L16 8L10 10L8 16L6 10L0 8L6 6Z' fill='%23b8923a'/%3E%3C/svg%3E") "\a0\a0\a0" counter(page, lower-roman) "\a0\a0\a0" url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 16 16'%3E%3Cpath d='M8 0L10 6L16 8L10 10L8 16L6 10L0 8L6 6Z' fill='%23b8923a'/%3E%3C/svg%3E");
+    vertical-align: top;
+    padding-top: 26pt;
+    font-family: "md2pdf Cormorant Garamond", "Iowan Old Style", Palatino, Georgia, serif;
+    font-size: 12pt;
+    font-style: italic;
+    font-weight: 500;
+    color: #56635d;
+  }
+}
+/* No header on the first page, where the title usually is. */
+@page :first {
+  @top-left {
+    border: 0;
+  }
+  @top-center {
+    content: "";
+    border: 0;
+  }
+  @top-right {
+    border: 0;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  background: #fff;
+}
