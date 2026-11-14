@@ -20,4 +20,4 @@ md2pdf.me depends on a released version, so a change the site needs ships as a r
 3. John publishes to npm (`npm publish`; publishing can't be undone).
 4. md2pdf.me moves to the new version in its own issue.
 
-A change to the styles must keep the CLI's PDFs pixel-identical unless the look is meant to change, and md2pdf.me checks its own pages against the new version before it moves.
+A change to the styles must keep the CLI's PDFs pixel-identical unless the look is meant to change, and md2pdf.me checks its own pages against the new version before it moves. Check a style or renderer change against `main` with `kit:pdf-check`.
