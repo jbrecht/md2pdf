@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, readdirSync, existsSync, copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
@@ -616,6 +616,65 @@ test('reports a missing file with exit code 1', () => {
   const r = run('/nonexistent/nope.md');
   assert.equal(r.status, 1);
   assert.match(r.stderr, /No such file/);
+});
+
+test('a Chrome that fails to start leaves nothing in the temp folder', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const r = spawnSync(process.execPath, [CLI, '-o', join(tmp, 'out.pdf'), join(FIXTURES, 'sample.md')], {
+      encoding: 'utf8',
+      env: { ...process.env, TMPDIR: tmp, CHROME_PATH: '/nonexistent/chrome' },
+    });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /ENOENT/);
+    assert.deepEqual(readdirSync(tmp), []);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('Control + C while Chrome prints stops it and leaves nothing in the temp folder', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  const bin = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  // A stand-in Chrome that says it has started, then prints forever. Like headless Chrome after a
+  // SIGINT, it ignores SIGINT and SIGTERM.
+  const started = join(bin, 'started');
+  const chrome = join(bin, 'chrome');
+  writeFileSync(
+    chrome,
+    `#!/bin/sh\ntrap '' INT TERM HUP\necho $$ > '${started}.part' && mv '${started}.part' '${started}'\nexec sleep 60\n`,
+    { mode: 0o755 },
+  );
+
+  // In its own process group, so the interrupt can reach md2pdf and Chrome together as a terminal's does.
+  const cli = spawn(process.execPath, [CLI, '-o', join(tmp, 'out.pdf'), join(FIXTURES, 'sample.md')], {
+    env: { ...process.env, TMPDIR: tmp, CHROME_PATH: chrome },
+    stdio: ['ignore', 'ignore', 'pipe'],
+    detached: true,
+  });
+  let stderr = '';
+  cli.stderr.on('data', (d) => (stderr += d));
+  const exited = new Promise((done) => cli.on('exit', (code, signal) => done({ code, signal })));
+  try {
+    for (let i = 0; i < 400 && !existsSync(started); i++) await new Promise((r) => setTimeout(r, 50));
+    assert.ok(existsSync(started), `the stand-in Chrome started\n${stderr}`);
+    const chromePid = Number(readFileSync(started, 'utf8'));
+    assert.ok(readdirSync(tmp).some((f) => f.startsWith('md2pdf-chrome-')), 'the profile exists while Chrome runs');
+
+    process.kill(-cli.pid, 'SIGINT');
+    const exit = await exited;
+    assert.deepEqual(exit, { code: null, signal: 'SIGINT' }, `${JSON.stringify(exit)}\n${stderr}`);
+    assert.deepEqual(readdirSync(tmp), []);
+    assert.throws(() => process.kill(chromePid, 0), { code: 'ESRCH' }, 'Chrome was stopped');
+  } finally {
+    try {
+      process.kill(-cli.pid, 'SIGKILL');
+    } catch {
+      // Already gone.
+    }
+    rmSync(bin, { recursive: true, force: true });
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test('rejects an unknown style', () => {
