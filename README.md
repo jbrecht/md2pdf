@@ -10,7 +10,7 @@ Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcod
 
 # Command-line tool (macOS)
 
-Markdown is rendered to HTML with [markdown-it](https://github.com/markdown-it/markdown-it) and printed to PDF by headless Chrome.
+Markdown is rendered to HTML with [markdown-it](https://github.com/markdown-it/markdown-it) and printed to PDF by headless Chrome. Formulas (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`, and environments such as `\begin{aligned}…\end{aligned}` that start a block; starred ones such as `align*` aren't recognised) are drawn with [KaTeX](https://katex.org), as on md2pdf.me; prices such as $5 and $10 stay text.
 
 ## Install
 
@@ -26,7 +26,7 @@ This installs:
 - **Convert to PDF** Quick Action — right-click any `.md` file in Finder → **Quick Actions → Convert to PDF**
 - **⌃⌥⌘P** keyboard shortcut — select `.md` files in Finder and press it
 
-Re-run `install.sh` if you move this folder or remove the Node version it was installed with. `./uninstall.sh` removes all of it.
+Re-run `install.sh` if you move this folder, remove the Node version it was installed with, or pull a version that adds a dependency (md2pdf says so when KaTeX, which draws formulas, is missing). `./uninstall.sh` removes all of it.
 
 To use a different shortcut, pass it when installing (`@` ⌘, `~` ⌥, `^` ⌃, `$` ⇧), or set it to empty to skip:
 
@@ -85,6 +85,8 @@ Styles are registered in the `STYLES` map in `bin/md2pdf.js`; each is a list of 
 - `styles/print/<name>.css`, the print-only rules: `@page` margins, running headers and page numbers, `html, body` margins, and `margin-trim: block-end` on `.markdown-body` in Safari, so it doesn't print a blank last page.
 
 Register it in `STYLES` and add its page margin to `pageMargins` in `lib/styles.js`, and it's available to `-s` and `set-style.sh`. Use `md2pdf --html` to get the intermediate HTML for tweaking in a browser. For one-off tweaks, `--css` is enough.
+
+`test/fixtures/sample.md` has the elements a style needs to handle: headings, lists, tables, code, block quotes, footnotes, images, math and a diagram; `test/fixtures/callouts.md` has the callouts. Check a style against them with `bin/md2pdf.js -s <name> test/fixtures/sample.md` (each PDF lands beside its Markdown; `*.pdf` is ignored). Its `mermaid` block prints as code here; md2pdf.me draws it as a diagram, so check diagrams there.
 
 A style can bundle fonts, so it looks the same on every computer:
 

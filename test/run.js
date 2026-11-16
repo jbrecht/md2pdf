@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, readdirSync, existsSync, copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, readdirSync, existsSync, copyFileSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -217,6 +217,72 @@ test('renders GitHub-flavored features into the HTML', () => {
   assert.match(html, /type="checkbox"/);
   assert.match(html, /class="footnotes"/);
   assert.match(html, /🚀/);
+});
+
+test('the CLI renders math with KaTeX and embeds its fonts', () => {
+  const dir = workspace();
+  const r = run('--html', join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  const html = readFileSync(join(dir, 'sample.html'), 'utf8');
+  assert.equal(html.match(/<span class="katex">/g)?.length, 6);
+  assert.doesNotMatch(html, /katex-error/);
+  assert.match(html, /prices like \$5 and \$10 stay text/);
+  assert.match(html, /font-family:KaTeX_Main;[^}]*src:url\("file:\/\/\/[^)]*\/katex\/dist\/fonts\/KaTeX_Main-/);
+  assert.match(html, /section\.eqno > span \{ width: 3em; text-align: right; \}/);
+  assert.match(html, /<pre><code class="hljs language-mermaid">flowchart LR/);
+  const fonts = pdfFonts(join(dir, 'sample.pdf'));
+  for (const font of ['KaTeX_Main-Regular', 'KaTeX_Math-Italic', 'KaTeX_Size1-Regular']) assert.ok(fonts.includes(font), `${font} in ${fonts}`);
+});
+
+test('the CLI adds no math stylesheet to a document without formulas', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'prices.md'), '# Prices\n\nIt costs $5 and $10.\n');
+    const r = run('--html', join(dir, 'prices.md'));
+    assert.equal(r.status, 0, r.stderr);
+    const html = readFileSync(join(dir, 'prices.html'), 'utf8');
+    assert.doesNotMatch(html, /katex|eqno/i);
+    assert.ok(!pdfFonts(join(dir, 'prices.pdf')).some((f) => f.startsWith('KaTeX')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a checkout installed without KaTeX still converts, printing formulas as source', () => {
+  // A copy of the CLI whose node_modules has every package but katex, as before install.sh is run again.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    for (const sub of ['bin', 'lib', 'styles']) cpSync(join(ROOT, sub), join(dir, sub), { recursive: true });
+    copyFileSync(join(ROOT, 'package.json'), join(dir, 'package.json'));
+    mkdirSync(join(dir, 'node_modules'));
+    for (const pkg of readdirSync(join(ROOT, 'node_modules')).filter((p) => p !== 'katex')) {
+      symlinkSync(join(ROOT, 'node_modules', pkg), join(dir, 'node_modules', pkg));
+    }
+    writeFileSync(join(dir, 'euler.md'), '# Euler\n\nIt says $e^{i\\pi} + 1 = 0$.\n');
+    const r = spawnSync(process.execPath, [join(dir, 'bin', 'md2pdf.js'), '--html', join(dir, 'euler.md')], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /^md2pdf: KaTeX isn't installed, so formulas print as their source; run .*install\.sh again\n$/);
+    const html = readFileSync(join(dir, 'euler.html'), 'utf8');
+    assert.match(html, /<p>It says \$e\^\{i\\pi\} \+ 1 = 0\$\.<\/p>/);
+    assert.doesNotMatch(html, /katex/i);
+    assert.ok(existsSync(join(dir, 'euler.pdf')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the CLI adds the math stylesheet when every formula is an error', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'bad.md'), '$$\\def\\a{x}\\a$$ (1)\n');
+    const r = run('--html', join(dir, 'bad.md'));
+    assert.equal(r.status, 0, r.stderr);
+    const html = readFileSync(join(dir, 'bad.html'), 'utf8');
+    assert.doesNotMatch(html, /<span class="katex">/);
+    assert.match(html, /section\.eqno > span \{ width: 3em; text-align: right; \}/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 const render = (markdown) =>
@@ -1167,6 +1233,9 @@ for (const style of STYLE_NAMES) {
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stderr, '');
     assert.match(readFileSync(join(dir, 'sample.html'), 'utf8'), new RegExp(`@page \\{\\s*margin: ${pageMargins[style]};`));
+    // The sample's formulas print in KaTeX's own fonts, not ones the style substitutes.
+    const fonts = pdfFonts(join(dir, 'sample.pdf'));
+    for (const font of ['KaTeX_Main-Regular', 'KaTeX_Math-Italic']) assert.ok(fonts.includes(font), `${font} in ${fonts}`);
   });
 
   test(`${style} style colors highlighted code`, () => {
