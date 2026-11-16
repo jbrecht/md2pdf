@@ -188,6 +188,16 @@
   font-family: var(--md2pdf-code-font);
 }
 
+/* github-markdown-css sets footnotes and keys in px, so they're restated as their share of the text
+   size, the same at 11pt. */
+.markdown-body .footnotes {
+  font-size: calc(9 / 11 * var(--md2pdf-font-size));
+}
+.markdown-body kbd {
+  font-size: calc(8.25 / 11 * var(--md2pdf-font-size));
+  line-height: calc(7.5 / 11 * var(--md2pdf-font-size));
+}
+
 /* github-markdown-css sets line heights in px and gaps in rem (12pt here), so they're restated with the
    spacing variables applied, and the gaps as multiples of the text size so they follow it rather than
    the page's root font size. */
@@ -322,6 +332,11 @@
 .markdown-body .footnotes ol {
   /* Room for numbers up to 99, which Safari sets further left than Chrome. */
   padding-left: 2.4em;
+}
+
+/* A word joiner keeps a footnote mark on the line with the word before it. */
+.markdown-body .footnote-ref::before {
+  content: "\2060";
 }
 
 /* An Obsidian embed (![[Other note]]) that can't be shown: a muted placeholder. */
