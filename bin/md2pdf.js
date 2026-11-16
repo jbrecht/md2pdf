@@ -34,6 +34,23 @@ const STYLES = {
   cyberpunk: styleFiles('cyberpunk'),
 };
 const FALLBACK_STYLE = 'github';
+// A checkout installed before KaTeX was a dependency has none until install.sh runs again; it still converts.
+const katex = await import('katex').then(
+  (m) => m.default,
+  (err) => {
+    if (err.code === 'ERR_MODULE_NOT_FOUND') return null;
+    throw err;
+  },
+);
+// Added after the style only when the document has a formula, so a document without math prints as before.
+// The rules after KaTeX's keep a displayed formula on one page and put a $$ … $$ (1) equation number at the
+// right margin, as md2pdf.me does.
+const MATH_CSS = katex && require.resolve('katex/dist/katex.min.css');
+const EQUATION_NUMBERS = `
+.markdown-body eqn { display: block; break-inside: avoid; }
+.markdown-body section.eqno { display: flex; align-items: center; }
+.markdown-body section.eqno > eqn { flex: 1; margin-left: 3em; }
+.markdown-body section.eqno > span { width: 3em; text-align: right; }`;
 
 // Settings shared by the CLI, Finder Quick Action and keyboard shortcut.
 const CONFIG_PATH =
@@ -119,9 +136,11 @@ function readCss(file) {
 }
 
 function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
-  const css = [...STYLES[style], ...(extraCss ? [extraCss] : [])].map(readCss).join('\n');
+  const bodyHtml = createRenderer({ hljs, ...(katex && { math: { katex } }) }).render(markdown);
+  const math = /<eqn?>/.test(bodyHtml) ? [readCss(MATH_CSS) + EQUATION_NUMBERS] : [];
+  const css = [...STYLES[style].map(readCss), ...math, ...(extraCss ? [readCss(extraCss)] : [])].join('\n');
   return buildDocument({
-    bodyHtml: createRenderer({ hljs }).render(markdown),
+    bodyHtml,
     title,
     css,
     pageSize,
@@ -283,6 +302,7 @@ async function main() {
   }
 
   const chrome = findChrome();
+  if (!katex) console.error(`md2pdf: KaTeX isn't installed, so formulas print as their source; run ${join(ROOT, 'install.sh')} again`);
   let failed = 0;
   for (const file of files) {
     try {

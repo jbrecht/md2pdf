@@ -27,6 +27,36 @@ def fib(n: int) -> int:
 | Task lists     | ✅        | Rendered as checkboxes     |
 | Footnotes      | ✅        | See below[^1]              |
 
+## Math
+
+Inline math such as $e^{i\pi} + 1 = 0$ and \(\sum_{k=1}^{n} k = \frac{n(n+1)}{2}\) sits in the line, while prices like $5 and $10 stay text.
+
+$$
+\int_{-\infty}^{\infty} e^{-x^2} \, dx = \sqrt{\pi}
+$$
+
+\[
+\mathbf{A} = \begin{pmatrix} a & b \\ c & d \end{pmatrix}, \qquad \det \mathbf{A} = ad - bc
+\]
+
+$$f(x) = \sum_{n=0}^{\infty} \frac{f^{(n)}(a)}{n!} (x - a)^n$$ (1)
+
+\begin{aligned}
+\nabla \cdot \mathbf{E} &= \frac{\rho}{\varepsilon_0} \\
+\nabla \times \mathbf{B} &= \mu_0 \mathbf{J} + \mu_0 \varepsilon_0 \frac{\partial \mathbf{E}}{\partial t}
+\end{aligned}
+
+## Diagram
+
+md2pdf.me draws this as a diagram; the CLI prints it as code.
+
+```mermaid
+flowchart LR
+  A[Markdown] --> B(markdown-it) --> C{Style}
+  C -->|screen| D[HTML]
+  C -->|print| E[PDF]
+```
+
 ## Lists
 
 - [x] Write the converter
