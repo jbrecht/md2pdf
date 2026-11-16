@@ -403,6 +403,50 @@ test('$ math renders beside a line break; prices stay text', async () => {
   assert.equal(formulas('A formula $x$, then $y$; then $z$.'), 3);
   assert.equal(formulas('It costs $5 and $10.\nOr $5\nand $10.'), 0);
   assert.match(md.render('Displayed\n$$a+b$$\ninline'), /<eqn>/);
+  // Prices beside a formula stay text too (#94).
+  for (const src of ['From $5 to $10 each, $x$', '$5 and $x$ and $10', '$x$ costs $5']) {
+    const html = md.render(src);
+    assert.equal(formulas(src), 1, src);
+    assert.doesNotMatch(html, /katex-error/, src);
+    assert.match(html, /<annotation encoding="application\/x-tex">x<\/annotation>/, src);
+  }
+  assert.equal(formulas('Pay $5, or $\\$5$'), 1);
+});
+
+test('starred environments render as displayed formulas (#94)', async () => {
+  const { default: katex } = await import('katex');
+  const md = createRenderer({ hljs, math: { katex } });
+  for (const [env, body] of [['align*', 'a &= b \\\\ c &= d'], ['equation*', 'E = mc^2'], ['gather*', 'a \\\\ b'], ['alignat*', '{1} a &= b']]) {
+    const html = md.render(`\\begin{${env}}\n${body}\n\\end{${env}}\n\nAfter.`);
+    assert.match(html, /^<section><eqn><span class="katex-display">/, env);
+    assert.doesNotMatch(html, /katex-error/, env);
+    assert.match(html, /<p>After\.<\/p>/, env);
+  }
+  // A starred end doesn't close the unstarred environment, nor the other way round.
+  assert.doesNotMatch(md.render('\\begin{align}x\\end{align*}'), /<eqn>/);
+  assert.doesNotMatch(md.render('\\begin{align*}x\\end{align}'), /<eqn>/);
+});
+
+test('formulas carry MathML for screen readers and look as before (#94)', async () => {
+  const { default: katex } = await import('katex');
+  const md = createRenderer({ hljs, math: { katex } });
+  const html = md.render('Euler: $e^{i\\pi} + 1 = 0$');
+  assert.match(html, /<span class="katex-mathml"><math xmlns="http:\/\/www\.w3\.org\/1998\/Math\/MathML">/);
+  assert.match(html, /<annotation encoding="application\/x-tex">e\^\{i\\pi\} \+ 1 = 0<\/annotation>/);
+  assert.match(html, /<span class="katex-html" aria-hidden="true">/);
+});
+
+test('the running header shows a formula in the first heading as its TeX (#94)', async () => {
+  const { default: katex } = await import('katex');
+  const md = createRenderer({ hljs, math: { katex } });
+  const header = (src) => headingText(md.render(src));
+  assert.equal(header("# Euler $e^{i\\pi}$ and $f'(x) < 1$"), "Euler $e^{i\\pi}$ and $f'(x) < 1$");
+  assert.equal(header('# A \\(x\\) and $$y$$'), 'A $x$ and $$y$$');
+  // A formula that failed to render shows its source, as on the page.
+  assert.equal(header('# Bad $\\frac{$ end'), 'Bad \\frac{ end');
+  assert.equal(header('# No math & <b>tags</b>'), 'No math & tags');
+  const doc = buildDocument({ bodyHtml: md.render('# Euler $e^{i\\pi}$\n\nText.'), title: 't', css: '' });
+  assert.match(doc, /--document-title: "Euler \$e\^\{i\\\\pi\}\$";/);
 });
 
 test('the CLI takes the document title from front matter when there is no heading', () => {
@@ -1692,7 +1736,8 @@ test('math refuses macro definitions and very long formulas, and caps sizes', as
   assert.doesNotMatch(md.render(`$${'x'.repeat(8000)}$`), /katex-error/);
   // A command that only starts like one isn't a definition.
   assert.doesNotMatch(md.render('$\\default$ $\\letter$'), /Macro definitions/);
-  assert.doesNotMatch(md.render('$\\rule{100000em}{100000em}$'), /100000em/);
+  // The size, not counting the TeX that MathML's annotation carries.
+  assert.doesNotMatch(md.render('$\\rule{100000em}{100000em}$').replace(/<annotation[^>]*>[^<]*<\/annotation>/g, ''), /100000em/);
   assert.doesNotMatch(md.render('$\\raisebox{60em}{x}$'), /-6\d(\.\d+)?em/);
   // An exception from KaTeX, such as nesting too deep for the stack, comes back as text.
   const throwing = createRenderer({ hljs, math: { katex: { renderToString() { throw new RangeError('too deep'); } } } });
@@ -1804,8 +1849,14 @@ test('math parses as markdown-it-texmath did', async () => {
       const rest = line.slice(line.lastIndexOf(closer) + closer.length).trim();
       return rest !== '' && !/^\([^()]*\)$/.test(rest);
     });
+  // Or where texmath's $ formula held a $ of its own (#94).
+  const dollarInside = (doc) => {
+    const holds = (tokens) =>
+      tokens.some((t) => (t.type === 'math_inline' && t.markup === '$' && /(^|[^\\])\$/.test(t.content)) || (t.children && holds(t.children)));
+    return holds(old.parse(doc, {}));
+  };
   const differ = docs.filter((doc) => JSON.stringify(shape(old.parse(doc, {}))) !== JSON.stringify(shape(now.parse(doc, {}))));
-  assert.deepEqual(differ.filter((doc) => !formulaInQuote(doc) && !textDropped(doc)), []);
+  assert.deepEqual(differ.filter((doc) => !formulaInQuote(doc) && !textDropped(doc) && !dollarInside(doc)), []);
   assert.ok(docs.length - differ.length > 19000, `${differ.length} of ${docs.length} differ`);
 });
 
@@ -2002,6 +2053,7 @@ test('Markdown rendered as the README says gives the page no script, foreign ids
     '[[#<b>]] ![[a.png|1" onerror="x]] ![[x" onerror=".png]] ![[javascript:alert(1).png]]',
     '```"onx=1 name=z\ncode\n```',
     '$\\href{javascript:alert(1)}{x}$ $\\htmlId{x}{y}$ $\\includegraphics{x.png}$ $\\url{javascript:x}$ $$\\def\\a{b}\\a$$ $\\htmlStyle{color:red}{s}$',
+    '$\\fcolorbox{red}{blue}{x} \\colorbox{x}{y} \\Huge\\raisebox{30em}{x}$ $\\text{</annotation><img src=x onerror=alert(1)>}$',
     '[top](#) [same](#config) :smile: | a |\n|---|\n| b |',
   ].map((doc) => md.render(doc)).join('\n');
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
@@ -2011,15 +2063,18 @@ test('Markdown rendered as the README says gives the page no script, foreign ids
   const article = document.querySelector('article');
   article.innerHTML = ${JSON.stringify(attacks).replace(/</g, '\\u003c')};
   const TAGS = new Set(['A', 'BLOCKQUOTE', 'CODE', 'DIV', 'EM', 'EQ', 'EQN', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HR', 'IMG', 'INPUT', 'LABEL', 'LI', 'OL', 'P', 'PATH', 'PRE', 'SECTION', 'SPAN', 'STRONG', 'SUP', 'SVG', 'TABLE', 'TBODY', 'TD', 'TH', 'THEAD', 'TR', 'UL']);
+  const MATHML = new Set(['ANNOTATION', 'MATH', 'MENCLOSE', 'MFRAC', 'MI', 'MLABELEDTR', 'MN', 'MO', 'MOVER', 'MPADDED', 'MPHANTOM', 'MROOT', 'MROW', 'MSPACE', 'MSQRT', 'MSTYLE', 'MSUB', 'MSUBSUP', 'MSUP', 'MTABLE', 'MTD', 'MTEXT', 'MTR', 'MUNDER', 'MUNDEROVER', 'SEMANTICS']);
   const problems = [];
   for (const el of article.querySelectorAll('*')) {
     const tag = el.tagName.toUpperCase();
-    if (!TAGS.has(tag)) problems.push('element ' + tag);
+    // KaTeX's MathML, hidden from sight in its own span.
+    const mathml = el.namespaceURI === 'http://www.w3.org/1998/Math/MathML' && MATHML.has(tag) && el.closest('.katex > .katex-mathml');
+    if (!TAGS.has(tag) && !mathml) problems.push('element ' + tag);
     for (const { name, value } of el.attributes) {
       if (/^on/i.test(name) || ['name', 'formaction', 'srcdoc'].includes(name)) problems.push(tag + ' ' + name);
       if (name === 'id' && !value.startsWith('doc-')) problems.push('id ' + value);
       if (name === 'style' && !el.closest('.katex, .katex-error')) problems.push('style on ' + tag);
-      if (name === 'href' && !/^(#$|#doc-|https?:|mailto:)/.test(value)) problems.push('href ' + value);
+      if (/^(xlink:)?href$/.test(name) && !/^(#$|#doc-|https?:|mailto:)/.test(value)) problems.push(name + ' ' + value);
       if (name === 'src' && /^\\s*(javascript|data|vbscript):/i.test(value)) problems.push('src ' + value);
     }
     if (tag === 'INPUT' && !(el.type === 'checkbox' && el.disabled)) problems.push('input ' + el.outerHTML);
