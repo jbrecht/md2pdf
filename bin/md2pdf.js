@@ -133,9 +133,46 @@ function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
   });
 }
 
+// The temp folders that exist right now, and the Chrome printing, so an interrupt can clean up.
+const tempDirs = new Set();
+let chromeProc = null;
+
+function makeTempDir(prefix) {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.add(dir);
+  return dir;
+}
+
+function removeTempDir(dir) {
+  rmSync(dir, { recursive: true, force: true });
+  tempDirs.delete(dir);
+}
+
+// On an interrupt, stop Chrome, wait for it to let go of its profile, remove the temp folders, then
+// die of the same signal so the shell sees it. Chrome gets SIGKILL: a Control + C reaches it too, and
+// headless Chrome that has had a SIGINT hangs and ignores SIGTERM, outliving md2pdf.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.once(signal, () => {
+    const die = () => {
+      for (const dir of tempDirs) {
+        try {
+          removeTempDir(dir);
+        } catch {
+          // Leave a folder that can't be removed rather than miss the others or the signal.
+        }
+      }
+      process.kill(process.pid, signal);
+    };
+    if (!chromeProc) return die();
+    chromeProc.once('close', die);
+    chromeProc.kill('SIGKILL');
+    setTimeout(die, 5000).unref();
+  });
+}
+
 function runChrome(chrome, htmlPath, pdfPath) {
   // A throwaway profile keeps headless Chrome separate from any Chrome you have open.
-  const profile = mkdtempSync(join(tmpdir(), 'md2pdf-chrome-'));
+  const profile = makeTempDir('md2pdf-chrome-');
   const args = [
     '--headless',
     '--disable-gpu',
@@ -149,12 +186,18 @@ function runChrome(chrome, htmlPath, pdfPath) {
     pathToFileURL(htmlPath).href,
   ];
   return new Promise((resolvePromise, reject) => {
-    const proc = spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const proc = (chromeProc = spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'] }));
     let stderr = '';
     proc.stderr.on('data', (d) => (stderr += d));
-    proc.on('error', reject);
+    // A Chrome that fails to start emits 'error' first, and main() may exit before its 'close' arrives.
+    proc.on('error', (err) => {
+      if (chromeProc === proc) chromeProc = null;
+      removeTempDir(profile);
+      reject(err);
+    });
     proc.on('close', (code) => {
-      rmSync(profile, { recursive: true, force: true });
+      if (chromeProc === proc) chromeProc = null;
+      removeTempDir(profile);
       if (code === 0 && existsSync(pdfPath)) resolvePromise();
       else reject(new Error(`Chrome failed (exit ${code}):\n${stderr.trim()}`));
     });
@@ -178,14 +221,14 @@ async function convert(input, opts, chrome) {
     pageSize: opts['page-size'],
   });
 
-  const workDir = mkdtempSync(join(tmpdir(), 'md2pdf-'));
+  const workDir = makeTempDir('md2pdf-');
   try {
     const htmlPath = join(workDir, `${stem}.html`);
     writeFileSync(htmlPath, html);
     if (opts.html) writeFileSync(pdfPath.replace(/\.pdf$/i, '') + '.html', html);
     await runChrome(chrome, htmlPath, pdfPath);
   } finally {
-    rmSync(workDir, { recursive: true, force: true });
+    removeTempDir(workDir);
   }
   return pdfPath;
 }
