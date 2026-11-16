@@ -22,6 +22,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'bin', 'md2pdf.js');
 const FIXTURES = join(ROOT, 'test', 'fixtures');
 
+// Every temp folder the suite and the processes it starts make goes in one folder, removed when the
+// suite exits, pass or fail, so a test that forgets its own leaves nothing behind.
+const SUITE_TMP = mkdtempSync(join(tmpdir(), 'md2pdf-suite-'));
+process.env.TMPDIR = SUITE_TMP;
+process.on('exit', () => rmSync(SUITE_TMP, { recursive: true, force: true, maxRetries: 3 }));
+
 // Point every run at a throwaway config so tests never touch the real default style.
 const CONFIG = join(mkdtempSync(join(tmpdir(), 'md2pdf-config-')), 'config.json');
 process.env.MD2PDF_CONFIG = CONFIG;
