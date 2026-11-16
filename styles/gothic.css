@@ -475,6 +475,11 @@
   color: var(--md2pdf-accent);
 }
 
+/* A word joiner keeps a footnote mark on the line with the word before it. */
+.markdown-body .footnote-ref::before {
+  content: "\2060";
+}
+
 /* An Obsidian embed (![[Other note]]) that can't be shown: a muted placeholder. */
 .markdown-body .markdown-embed {
   color: var(--md2pdf-muted);

@@ -504,8 +504,8 @@ ${articles}
   const size = (a, sel) => parseFloat(getComputedStyle(sel ? a.querySelector(sel) : a).fontSize);
   window.probeOut = {
     changed: docs.map((doc) => doc.filter((sig, i) => sig !== docs[0][i]).length),
-    // Heading and code sizes as a multiple of the text size.
-    ratios: [...document.querySelectorAll('article')].map((a) => [size(a, 'h1') / size(a), size(a, 'pre code') / size(a)]),
+    // Heading, code, footnote and key sizes as a multiple of the text size.
+    ratios: [...document.querySelectorAll('article')].map((a) => ['h1', 'pre code', '.footnotes', 'kbd'].map((sel) => size(a, sel) / size(a))),
   };
 </script>
 </body></html>`);
@@ -751,6 +751,44 @@ test('no style lets a page break between the footnotes line and the first footno
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('no style lets a footnote mark start a line', () => {
+  // Browsers may break a line between punctuation and the "[" that follows it.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const n = Array.from({ length: 12 }, (_, i) => i + 1);
+    const notes = createRenderer({ hljs }).render(`${n.map((i) => `Sentence ${i}.[^${i}]`).join(' ')}\n\n${n.map((i) => `[^${i}]: Note.`).join('\n')}`);
+    for (const style of STYLE_NAMES) {
+      writeFileSync(join(dir, 'marks.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${screenCss(style)}</style></head>
+<body><article class="markdown-body">${notes}</article>
+<script>
+  const p = document.querySelector('.markdown-body p');
+  const started = [];
+  for (let width = 150; width <= 650; width++) {
+    p.style.width = width + 'px';
+    for (const mark of p.querySelectorAll('.footnote-ref')) {
+      // A mark that starts a line sits left of the character before it.
+      const before = document.createRange();
+      before.setStart(mark.previousSibling, mark.previousSibling.length - 1);
+      before.setEnd(mark.previousSibling, mark.previousSibling.length);
+      if (mark.getBoundingClientRect().left < before.getBoundingClientRect().left) started.push(width + 'px ' + mark.textContent);
+    }
+  }
+  window.probeOut = started.slice(0, 5);
+</script></body></html>`);
+      assert.deepEqual(probeInChrome(join(dir, 'marks.html'), dir), [], style);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('every style trims the space below the last block of a printed document', () => {
+  // Safari prints a blank last page when that space runs past the end of a page. Only Safari trims it:
+  // Chrome's margin-trim also drops the space above a block that a page break moves.
+  const rule = /\n@supports \(font: -apple-system-body\) \{\s*\.markdown-body \{\s*margin-trim: block-end;\s*\}\s*\}/;
+  for (const style of STYLE_NAMES) assert.match(readFileSync(join(ROOT, 'styles', 'print', `${style}.css`), 'utf8'), rule, style);
 });
 
 test('worksheet style prints with its bundled fonts', () => {
@@ -1324,6 +1362,45 @@ Footnote.[^1]
       const found = [...copied].findIndex((c, i) => c !== [...expected][i]);
       const at = found === -1 ? [...copied].length : found;
       assert.ok(copied === expected, `${style} copies "${[...copied].slice(Math.max(0, at - 20), at + 20).join('')}" where the source has "${[...expected].slice(Math.max(0, at - 20), at + 20).join('')}"`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('no style prints a blank last page from Safari', { skip: !swiftc && 'needs macOS and swiftc' }, () => {
+  // The last paragraph ends about four fifths of the way down the page, and the 400px margin below it
+  // runs past the page whatever its exact height. Safari starts a page for that margin unless the style
+  // trims it.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'doc.md'), '<div class="spacer"></div>\n\nThe last paragraph.\n');
+    const pages = STYLE_NAMES.flatMap((style) => {
+      mkdirSync(join(dir, style));
+      const r = run('-s', style, '--html', '-o', join(dir, style, 'doc.pdf'), join(dir, 'doc.md'));
+      assert.equal(r.status, 0, r.stderr);
+      const [top, , bottom = top] = pageMargins[style].split(' ').map(parseFloat);
+      const fill = `<style>
+  .markdown-body > * { margin-top: 0 !important; }
+  .markdown-body > p:last-child { line-height: 20px !important; margin-bottom: 400px !important; }
+</style></head>`;
+      const spacer = `<script>
+  const spacer = document.querySelector('.spacer');
+  spacer.style.height = ${0.8 * (11 - top - bottom) * 96} - spacer.getBoundingClientRect().top - 20 + 'px';
+</script></body>`;
+      const html = readFileSync(join(dir, style, 'doc.html'), 'utf8').replace('</head>', fill).replace('</body>', spacer);
+      writeFileSync(join(dir, style, 'doc.html'), html);
+      // The same page without the trim, which must reach a second page for the test to mean anything.
+      // github-markdown-css's clearfix also keeps Safari from starting a page for the margin, so it goes too.
+      const untrimmed = '<style>.markdown-body { margin-trim: none !important; } .markdown-body::after { content: none !important; }</style></head>';
+      writeFileSync(join(dir, style, 'untrimmed.html'), html.replace('</head>', untrimmed));
+      return [join(dir, style, 'doc.html'), join(dir, style, 'untrimmed.html')];
+    });
+    execFileSync('swiftc', ['-O', join(ROOT, 'test', 'webkit-print.swift'), '-o', join(dir, 'webkit-print')], { stdio: 'pipe' });
+    execFileSync(join(dir, 'webkit-print'), pages, { stdio: 'pipe', timeout: 120_000 });
+    for (const style of STYLE_NAMES) {
+      assert.equal(pageCount(join(dir, style, 'untrimmed.webkit.pdf')), 2, `${style}: without the trim, the margin doesn't reach a second page`);
+      assert.equal(pageCount(join(dir, style, 'doc.webkit.pdf')), 1, `${style} prints a blank last page`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });

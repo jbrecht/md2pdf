@@ -30,3 +30,12 @@ body {
 .markdown-body table {
   overflow: visible;
 }
+
+/* Nothing follows the document's last block, so Safari keeps no space below it: it starts a blank
+   page for that space when it runs past the end of a page. Only Safari, since Chrome's margin-trim
+   also drops the space above a block that a page break moves. */
+@supports (font: -apple-system-body) {
+  .markdown-body {
+    margin-trim: block-end;
+  }
+}
