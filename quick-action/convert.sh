@@ -13,15 +13,21 @@ if [[ ! -x "$MD2PDF" ]]; then
   exit 1
 fi
 
+# stdout is the PDF's path alone; a conversion that works can still print warnings on stderr.
+log=$(mktemp -t md2pdf-quick-action) || exit 1
 ok=()
 errors=()
 for f in "$@"; do
-  if pdf=$("$MD2PDF" "$f" 2>&1); then
+  if pdf=$("$MD2PDF" "$f" 2>"$log"); then
     ok+=("$pdf")
   else
-    errors+=("${f:t}: ${pdf#md2pdf: }")
+    # The error is the last thing printed, after any warnings, as "md2pdf: <file>: <error>".
+    err=$(<"$log")
+    prefix="md2pdf: $f: "
+    errors+=("${f:t}: ${${err##*$prefix}#md2pdf: }")
   fi
 done
+rm -f "$log"
 
 if (( ${#errors} )); then
   notify "md2pdf: ${#errors} failed" "${errors[1]}"

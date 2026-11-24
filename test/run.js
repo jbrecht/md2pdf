@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, readdirSync, existsSync, copyFileSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdtempSync, readFileSync, readdirSync, existsSync, copyFileSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -373,6 +373,51 @@ test('titleOf skips front matter and falls back to its title field', () => {
   assert.equal(titleOf('title: Not front matter\n', 'stem'), 'stem');
 });
 
+test('titleOf reads block-scalar titles and drops a trailing comment (#105)', () => {
+  const title = (yaml) => titleOf(`---\n${yaml}\n---\nNo heading`, 'stem');
+  assert.equal(title('title: >\n  Folded\n  over lines\nauthor: x'), 'Folded over lines');
+  assert.equal(title('title: |\n  Literal\n\n  lines\n'), 'Literal lines');
+  assert.equal(title('title: >-\n\tTabbed'), 'Tabbed');
+  assert.equal(title('title: |2+ # why\n    Indicators'), 'Indicators');
+  assert.equal(title('title: >\nauthor: x'), 'stem');
+  assert.equal(title('title: |'), 'stem');
+  assert.equal(title('title: > not a block'), '> not a block');
+  assert.equal(title("title: It's here  # comment"), "It's here");
+  assert.equal(title('title: "Quoted # kept" # dropped'), 'Quoted # kept');
+  assert.equal(title("title: 'It''s'"), "It''s");
+  assert.equal(title('title: C# and F#'), 'C# and F#');
+  assert.equal(title('title: # only a comment'), 'stem');
+  assert.equal(title('Title: Caps'), 'stem');
+  assert.equal(title('titles: x\nsubtitle: y'), 'stem');
+});
+
+test('a byte-order mark changes nothing (#105)', () => {
+  for (const doc of ['# Title\n\nBody', '---\ntitle: From YAML\ntags: [a]\n---\nBody', '---\ntitle: >\n  Folded\n---\n\n- item']) {
+    assert.equal(render(`\uFEFF${doc}`), render(doc), doc);
+    assert.equal(titleOf(`\uFEFF${doc}`, 'stem'), titleOf(doc, 'stem'), doc);
+    assert.notEqual(titleOf(doc, 'stem'), 'stem');
+  }
+  assert.equal(render('\uFEFF# Title'), '<h1 id="title" tabindex="-1">Title</h1>\n');
+  // One mark, and only at the very start.
+  assert.match(render('\uFEFF\uFEFF---\ntitle: x\n---\nBody'), /title: x/);
+  assert.equal(titleOf('\uFEFF\uFEFF---\ntitle: x\n---\nBody', 'stem'), 'stem');
+  assert.equal(render('Text\n\n\uFEFF# Not a heading'), '<p>Text</p>\n<p>\uFEFF# Not a heading</p>\n');
+});
+
+test('the CLI reads a file that starts with a byte-order mark (#105)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'note.md'), '\uFEFF---\ntags: [a]\n---\n# From Notepad\n');
+    const r = run('--html', join(dir, 'note.md'));
+    assert.equal(r.status, 0, r.stderr);
+    const html = readFileSync(join(dir, 'note.html'), 'utf8');
+    assert.match(html, /<title>From Notepad<\/title>/);
+    assert.match(html, /<article class="markdown-body">\n<h1 id="from-notepad"[^>]*>From Notepad<\/h1>/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('titleOf reads the heading as it renders, never a # line in code', () => {
   assert.equal(titleOf('```bash\n# install deps\nnpm i\n```\n\n# Setup guide\n', 'stem'), 'Setup guide');
   assert.equal(titleOf('    # indented code\n\nText', 'stem'), 'stem');
@@ -457,6 +502,27 @@ test('the CLI takes the document title from front matter when there is no headin
   const html = readFileSync(join(dir, 'note.html'), 'utf8');
   assert.match(html, /<title>Weekly notes<\/title>/);
   assert.equal(html.match(/<article class="markdown-body">\n([^]*)<\/article>/)[1], '<p>Just a paragraph.</p>\n\n');
+});
+
+test('(c), (r) and (tm) print as typed; dashes, ellipses and quotes are set as before (#108)', () => {
+  assert.equal(render('(a) one (b) two (c) three; Rule 12(c), f(r), Acme(tm)'), '<p>(a) one (b) two (c) three; Rule 12(c), f(r), Acme(tm)</p>\n');
+  assert.equal(render('(C) (R) (TM) *(c)* **(tm)**'), '<p>(C) (R) (TM) <em>(c)</em> <strong>(tm)</strong></p>\n');
+  assert.match(render('# Rule 12(c)\n\n| (r) |\n|---|\n| (tm) |\n\n[[#Rule 12(c)]]'), /<h1 id="rule-12c"[^>]*>Rule 12\(c\)<\/h1>[^]*<th>\(r\)<\/th>[^]*<td>\(tm\)<\/td>[^]*<a href="#rule-12c">/);
+  assert.equal(titleOf('# Rule 12(c) for Acme(tm)', 'stem'), 'Rule 12(c) for Acme(tm)');
+  assert.equal(titleOf('---\ntitle: Part (c)\n---\n', 'stem'), 'Part (c)');
+  assert.equal(render('© ® ™ &copy; &#169; &reg; &trade;'), '<p>© ® ™ © © ® ™</p>\n');
+  // Everything else is set as markdown-it's typographer sets it.
+  const theirs = new MarkdownIt({ html: true, linkify: true, typographer: true });
+  for (const text of [
+    'a -- b --- c, d--e, f---g, ---- and -----',
+    'Wait... what?.... no!..... really???? yes!!!!! one,, two,,,',
+    '10 +- 2 and "double" and \'single\' and it\'s',
+    'https://example.com/a--b...c stays, `a -- b...` stays, [a -- b...](https://example.com/--)',
+    'line one --\n-- line two...\n...and three',
+  ]) {
+    assert.equal(render(text), theirs.render(text), text);
+  }
+  assert.equal(render('a -- b... +-1'), '<p>a – b… ±1</p>\n');
 });
 
 test('wikilinks render as the text Obsidian shows', () => {
@@ -728,6 +794,84 @@ test('reports a missing file with exit code 1', () => {
   assert.match(r.stderr, /No such file/);
 });
 
+test('a PDF that can\'t be written fails, even with an older PDF at its path (#103)', () => {
+  const dir = workspace();
+  const target = join(dir, 'out.pdf');
+  writeFileSync(target, 'older');
+  chmodSync(target, 0o444);
+  const r = run('-o', target, join(dir, 'sample.md'));
+  assert.equal(r.status, 1);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /^md2pdf: .*sample\.md: Could not write .*out\.pdf: EACCES: permission denied\n$/);
+  assert.equal(readFileSync(target, 'utf8'), 'older');
+});
+
+test('a missing output folder is named in one line (#103)', () => {
+  const dir = workspace();
+  const r = run('-o', join(dir, 'missing', 'x.pdf'), join(dir, 'sample.md'));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^md2pdf: .*sample\.md: No such folder: .*missing\n$/);
+});
+
+test('an input is never replaced by its own PDF (#103)', () => {
+  const dir = workspace();
+  const input = join(dir, 'report.pdf');
+  copyFileSync(join(dir, 'sample.md'), input);
+  const before = readFileSync(input, 'utf8');
+  for (const args of [[input], ['-o', input, input], ['-o', join(dir, 'REPORT.PDF'), input]]) {
+    const r = run(...args);
+    assert.equal(r.status, 1, args.join(' '));
+    assert.match(r.stderr, /would replace the file it is made from/);
+    assert.equal(readFileSync(input, 'utf8'), before);
+  }
+});
+
+test('two inputs that would write the same PDF are reported (#103)', () => {
+  const dir = workspace();
+  copyFileSync(join(dir, 'sample.md'), join(dir, 'sample.markdown'));
+  let r = run(join(dir, 'sample.md'), join(dir, 'sample.markdown'));
+  assert.equal(r.status, 1);
+  assert.equal(r.stdout.trim().split('\n').length, 1);
+  assert.match(r.stderr, /sample\.markdown: .*sample\.pdf was already written from .*sample\.md/);
+  // The same PDF under another name: by case where the disk ignores it, and through a symlink.
+  symlinkSync(join(dir, 'sample.pdf'), join(dir, 'other.pdf'));
+  copyFileSync(join(dir, 'sample.md'), join(dir, 'other.md'));
+  r = run(join(dir, 'sample.md'), join(dir, 'other.md'));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /other\.md: .*other\.pdf was already written from .*sample\.md/);
+  if (existsSync(join(dir, 'SAMPLE.MD'))) {
+    rmSync(join(dir, 'sample.markdown'));
+    copyFileSync(join(dir, 'sample.md'), join(dir, 'SAMPLE.markdown'));
+    r = run(join(dir, 'sample.md'), join(dir, 'SAMPLE.markdown'));
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /SAMPLE\.markdown: .*SAMPLE\.pdf was already written from .*sample\.md/);
+  }
+});
+
+test('an unknown page size is an error; names, orientations and lengths are taken (#103)', () => {
+  const dir = workspace();
+  for (const size of ['Bogus', 'A4 sideways', '5 8', '5.in 8in', '5in -8in', '5in 8in 2in', 'auto landscape', 'A4 A3', 'Letter; } body { color: red', '']) {
+    const r = run('-p', size, join(dir, 'sample.md'));
+    assert.equal(r.status, 2, size);
+    assert.match(r.stderr, /unknown page size/);
+    assert.ok(!existsSync(join(dir, 'sample.pdf')));
+  }
+  const box = (size) => {
+    const r = run('-o', join(dir, 'sized.pdf'), '-p', size, join(dir, 'sample.md'));
+    assert.equal(r.status, 0, `${size}: ${r.stderr}`);
+    return readFileSync(join(dir, 'sized.pdf'), 'latin1').match(/\/MediaBox\s*\[([^\]]+)\]/)[1].trim().split(/\s+/).slice(2).map(Math.round);
+  };
+  assert.deepEqual(box('legal'), [612, 1008]);
+  assert.deepEqual(box('A4 landscape'), [842, 595]);
+  assert.deepEqual(box('landscape letter'), [792, 612]);
+  assert.deepEqual(box('5in 8in'), [360, 576]);
+  assert.deepEqual(box('148mm 210mm'), box('A5'));
+  assert.deepEqual(box('+5.0in .8e1in'), [360, 576]);
+  assert.deepEqual(box('10em 20rem'), [120, 240]);
+  assert.deepEqual(box('50vw 50vh'), [306, 396]);
+  assert.deepEqual(box('auto'), [612, 792]);
+});
+
 test('a Chrome that fails to start leaves nothing in the temp folder', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
   try {
@@ -791,6 +935,15 @@ test('rejects an unknown style', () => {
   const r = run('-s', 'bogus', join(FIXTURES, 'sample.md'));
   assert.equal(r.status, 2);
   assert.match(r.stderr, /unknown style "bogus"/);
+});
+
+test('a name every object inherits is not a style (#103)', () => {
+  const dir = workspace();
+  for (const name of ['toString', 'constructor', '__proto__']) {
+    const r = run('-s', name, join(dir, 'sample.md'));
+    assert.equal(r.status, 2, name);
+    assert.match(r.stderr, new RegExp(`unknown style "${name}"`));
+  }
 });
 
 test('worksheet style keeps the title and its bar on one page', () => {
@@ -1807,6 +1960,29 @@ test('math in a blockquote and with equation numbers renders as before', async (
   assert.match(md.render('> \\[x\n\nafter \\]'), /^<blockquote>\n<p>\[x<\/p>\n<\/blockquote>\n<p>after \]<\/p>/);
 });
 
+test('an equation number stands on the formula\'s last line; (a) on a later line stays text (#106)', async () => {
+  const md = await untrustedRenderer();
+  for (const [doc, text] of [
+    ['$$\nx = 1\n$$\n\n(a) Show that x is one.', '<p>(a) Show that x is one.</p>'],
+    ['$$x = 1$$\n\n(1) First item', '<p>(1) First item</p>'],
+    ['\\[x = 1\\]\n\n(as Gauss showed) the rest', '<p>(as Gauss showed) the rest</p>'],
+    ['$$\nx = 1\n$$\n(3)', '<p>(3)</p>'],
+    ['\\[x = 1\\]\r\n(3) next line', '<p>(3) next line</p>'],
+  ]) {
+    const html = md.render(doc);
+    assert.match(html, /^<section><eqn>/, doc);
+    assert.ok(html.endsWith(`</eqn></section>${text}\n`), `${doc}: ${html.slice(-80)}`);
+  }
+  for (const [doc, number] of [
+    ['$$E = mc^2$$ (1)', '(1)'],
+    ['$$\nE = mc^2\n$$ (2)', '(2)'],
+    ['$$E = mc^2$$\t(3)', '(3)'],
+    ['\\[\nE = mc^2\n\\] (eq. 4)', '(eq. 4)'],
+  ]) {
+    assert.ok(md.render(doc).trimEnd().endsWith(`</eqn><span>${number}</span></section>`), doc);
+  }
+});
+
 test('math parses as markdown-it-texmath did', async () => {
   const { default: katex } = await import('katex');
   const texmath = require('markdown-it-texmath');
@@ -1990,8 +2166,15 @@ test('adversarial Markdown renders in about the time markdown-it takes', async (
     const took = elapsed(() => renderer.render(src));
     if (took >= limit) slow.push(`${name}: ${Math.round(took)} ms, limit ${Math.round(limit)} ms`);
   }
-  const took = elapsed(() => titleOf(`---\ntitle: a${' '.repeat(50000)}b\n---\n`, 'stem'));
-  if (took >= 500) slow.push(`titleOf: ${Math.round(took)} ms`);
+  for (const [name, title] of [
+    ['spaces', `a${' '.repeat(50000)}b`],
+    ['quotes and comments before a lone \\r', `"${'"#'.repeat(80000)}\rx`],
+    ['comments before a line separator', `a${' #'.repeat(80000)}\u2028x`],
+    ['block scalars', `${'>\n\n \ntitle: '.repeat(80000)}>`],
+  ]) {
+    const took = elapsed(() => titleOf(`---\ntitle: ${title}\n---\n`, 'stem'));
+    if (took >= 500) slow.push(`titleOf, ${name}: ${Math.round(took)} ms`);
+  }
   assert.deepEqual(slow, []);
 });
 
@@ -2128,3 +2311,84 @@ test('--set-style rejects an unknown style and leaves the config alone', () => {
   assert.equal(r.status, 2);
   assert.ok(!existsSync(CONFIG));
 });
+
+test('--set-style rejects a name every object inherits (#103)', () => {
+  rmSync(CONFIG, { force: true });
+  const r = run('--set-style', 'toString');
+  assert.equal(r.status, 2);
+  assert.ok(!existsSync(CONFIG));
+});
+
+test('a config that names an inherited property, or isn\'t an object, falls back with a warning (#103)', () => {
+  const dir = workspace();
+  try {
+    writeFileSync(CONFIG, '{"style":"constructor"}');
+    let r = run(join(dir, 'sample.md'));
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /config style "constructor" no longer exists; using github/);
+    for (const json of ['null', '[]', '"classic"', '7']) {
+      writeFileSync(CONFIG, json);
+      r = run('--list-styles');
+      assert.equal(r.status, 0, json);
+      assert.match(r.stderr, /^md2pdf: ignoring unreadable config .*: not a JSON object\n$/);
+      assert.match(r.stdout, /^\* github$/m);
+    }
+  } finally {
+    rmSync(CONFIG, { force: true });
+  }
+});
+
+// Runs the Quick Action's script with a stand-in md2pdf that prints `stderr`, then the path of a PDF if
+// `ok`, and with stand-ins for open and osascript. Returns the arguments each of those was called with.
+function quickAction({ stderr, ok }, files) {
+  const home = mkdtempSync(join(tmpdir(), 'md2pdf-home-'));
+  const bin = join(home, '.local', 'bin');
+  mkdirSync(bin, { recursive: true });
+  const script = (name, body) => writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+  script('md2pdf', `printf '%s\\n' ${stderr.map((line) => `"${line}"`).join(' ')} >&2\n${ok ? 'echo "${1%.md}.pdf"' : 'exit 1'}`);
+  for (const name of ['open', 'osascript']) script(name, `printf '%s\\n' "$@" >> "${home}/${name}.log"`);
+  const r = spawnSync('/bin/zsh', [join(ROOT, 'quick-action', 'convert.sh'), ...files], {
+    encoding: 'utf8',
+    env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  const log = (name) => (existsSync(join(home, `${name}.log`)) ? readFileSync(join(home, `${name}.log`), 'utf8') : '');
+  return { opened: log('open'), notified: log('osascript') };
+}
+
+test('the Quick Action opens the PDF of a conversion that printed a warning (#104)', { skip: !existsSync('/bin/zsh') && 'needs zsh' }, () => {
+  const warning = 'md2pdf: config style $1 no longer exists; using github';
+  let r = quickAction({ stderr: [warning], ok: true }, ['/docs/my note.md']);
+  assert.equal(r.opened, '/docs/my note.pdf\n');
+  assert.equal(r.notified, '');
+  r = quickAction({ stderr: [warning], ok: true }, ['/docs/a.md', '/docs/b.md']);
+  assert.equal(r.opened, '');
+  assert.match(r.notified, /^Created 2 PDFs$/m);
+});
+
+test('the Quick Action shows the error of a failed conversion, not the warnings before it (#104)', { skip: !existsSync('/bin/zsh') && 'needs zsh' }, () => {
+  const r = quickAction({ stderr: ['md2pdf: a warning', 'md2pdf: $1: No such file: $1'], ok: false }, ['/docs/[gone]*.md']);
+  assert.equal(r.opened, '');
+  assert.match(r.notified, /^md2pdf: 1 failed$/m);
+  assert.match(r.notified, /^\[gone\]\*\.md: No such file: \/docs\/\[gone\]\*\.md$/m);
+  assert.doesNotMatch(r.notified, /a warning/);
+});
+
+// install.sh's lines that point the workflow at convert.sh, run on a copy of the workflow as if md2pdf
+// were in `root`. Returns the command the Quick Action would then run.
+function installedCommand(root) {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-install-'));
+  cpSync(join(ROOT, 'quick-action', 'Convert to PDF.workflow'), join(dir, 'w.workflow'), { recursive: true });
+  const lines = readFileSync(join(ROOT, 'install.sh'), 'utf8').split('\n').filter((line) => /^script_path=|__CONVERT_SCRIPT__\|/.test(line));
+  assert.ok(lines.length >= 2 && lines.at(-1).includes('sed'), lines.join('\n'));
+  const r = spawnSync('/bin/zsh', ['-c', ['set -eu', ...lines].join('\n')], { encoding: 'utf8', env: { ...process.env, ROOT: root, WORKFLOW: join(dir, 'w.workflow') } });
+  assert.equal(r.status, 0, r.stderr);
+  return readFileSync(join(dir, 'w.workflow', 'Contents', 'document.wflow'), 'utf8').match(/<string>(exec [^<]*)<\/string>/)[1];
+}
+
+test('install.sh points the Quick Action at convert.sh from a folder with & in its path (#104)', { skip: !existsSync('/bin/zsh') && 'needs zsh' }, () => {
+  assert.equal(installedCommand('/Users/x/md2pdf'), 'exec "/Users/x/md2pdf/quick-action/convert.sh" "$@"');
+  assert.equal(installedCommand('/Users/x/R&D/md2pdf'), 'exec "/Users/x/R&amp;D/md2pdf/quick-action/convert.sh" "$@"');
+  assert.equal(installedCommand('/Users/x/a\\b|c & d'), 'exec "/Users/x/a\\b|c &amp; d/quick-action/convert.sh" "$@"');
+});
+
