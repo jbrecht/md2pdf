@@ -35,8 +35,11 @@ echo "→ Installing Quick Action at $WORKFLOW"
 mkdir -p "$SERVICES"
 rm -rf "$WORKFLOW"
 cp -R "$ROOT/quick-action/Convert to PDF.workflow" "$WORKFLOW"
-# Point the workflow at convert.sh (XML-escape & in case the path contains one).
+# Point the workflow at convert.sh (XML-escape & in case the path contains one). In sed's replacement
+# a backslash escapes, & stands for the matched text and | ends it.
 script_path=${ROOT//&/&amp;}/quick-action/convert.sh
+script_path=${script_path//\\/\\\\}
+script_path=${script_path//&/\\&}
 /usr/bin/sed -i '' "s|__CONVERT_SCRIPT__|${script_path//|/\\|}|" "$WORKFLOW/Contents/document.wflow"
 /System/Library/CoreServices/pbs -update 2>/dev/null || true
 

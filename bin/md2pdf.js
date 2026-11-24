@@ -2,7 +2,7 @@
 // md2pdf: convert Markdown files to PDF using headless Chrome.
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -34,6 +34,21 @@ const STYLES = {
   cyberpunk: styleFiles('cyberpunk'),
 };
 const FALLBACK_STYLE = 'github';
+// Not STYLES[name], which is truthy for names every object inherits, such as toString.
+const isStyle = (name) => typeof name === 'string' && Object.hasOwn(STYLES, name);
+// The @page sizes md2pdf takes: auto, a paper name, an orientation or both, or one or two lengths. Chrome
+// prints a size it can't read at Letter without a word. It also reads calc() and newer units, which
+// aren't taken here.
+const PAPER = ['a5', 'a4', 'a3', 'b5', 'b4', 'jis-b5', 'jis-b4', 'letter', 'legal', 'ledger'];
+const ORIENTATION = ['portrait', 'landscape'];
+const LENGTH = /^\+?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(?:in|cm|mm|q|pt|pc|px|em|rem|ex|ch|vw|vh|vmin|vmax)$/;
+function isPageSize(size) {
+  const words = size.trim().toLowerCase().split(/\s+/);
+  if (words.length > 2) return false;
+  if (words.every((w) => LENGTH.test(w)) || size.trim().toLowerCase() === 'auto') return true;
+  const count = (list) => words.filter((w) => list.includes(w)).length;
+  return count(PAPER) <= 1 && count(ORIENTATION) <= 1 && count(PAPER) + count(ORIENTATION) === words.length;
+}
 // A checkout installed before KaTeX was a dependency has none until install.sh runs again; it still converts.
 const katex = await import('katex').then(
   (m) => m.default,
@@ -75,7 +90,7 @@ Options:
   -o, --output <file>    Output path (only with a single input file)
   -s, --style <name>     Style to use (${Object.keys(STYLES).join(', ')}; default: ${defaultStyle})
       --css <file>       Extra CSS file applied after the style
-  -p, --page-size <size> Letter, A4, Legal, ... (default: Letter)
+  -p, --page-size <size> Letter, A4, Legal, "A4 landscape", "5in 8in", ... (default: Letter)
       --open             Open the PDF when done
       --html             Also write the intermediate .html (for debugging styles)
       --set-style <name> Make <name> the default style (also used by the Finder Quick Action)
@@ -89,7 +104,9 @@ Environment:
 function readConfig() {
   if (!existsSync(CONFIG_PATH)) return {};
   try {
-    return JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+    const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+    if (config === null || typeof config !== 'object' || Array.isArray(config)) throw new Error('not a JSON object');
+    return config;
   } catch (err) {
     console.error(`md2pdf: ignoring unreadable config ${CONFIG_PATH}: ${err.message}`);
     return {};
@@ -223,12 +240,24 @@ function runChrome(chrome, htmlPath, pdfPath) {
   });
 }
 
-async function convert(input, opts, chrome) {
+// A file's identity, whatever name reaches it: names can differ by case, a symlink or a hard link.
+const fileId = (stat) => `${stat.dev}:${stat.ino}`;
+
+// `written` maps each PDF this run has written, by fileId, to the input it came from.
+async function convert(input, opts, chrome, written) {
   const inputPath = resolve(input);
   if (!existsSync(inputPath)) throw new Error(`No such file: ${input}`);
-  const markdown = readFileSync(inputPath, 'utf8');
   const stem = basename(inputPath, extname(inputPath));
   const pdfPath = resolve(opts.output ?? join(dirname(inputPath), `${stem}.pdf`));
+  const target = statSync(pdfPath, { throwIfNoEntry: false });
+  if (target && fileId(target) === fileId(statSync(inputPath))) {
+    throw new Error('The PDF would replace the file it is made from; give another path with --output');
+  }
+  if (target && written.has(fileId(target))) {
+    throw new Error(`${pdfPath} was already written from ${written.get(fileId(target))}; convert it alone with --output`);
+  }
+  if (!existsSync(dirname(pdfPath))) throw new Error(`No such folder: ${dirname(pdfPath)}`);
+  const markdown = readFileSync(inputPath, 'utf8');
   const title = titleOf(markdown, stem);
 
   const html = buildHtml({
@@ -245,10 +274,18 @@ async function convert(input, opts, chrome) {
     const htmlPath = join(workDir, `${stem}.html`);
     writeFileSync(htmlPath, html);
     if (opts.html) writeFileSync(pdfPath.replace(/\.pdf$/i, '') + '.html', html);
-    await runChrome(chrome, htmlPath, pdfPath);
+    // Chrome prints into the temp folder: printing over a PDF it can't replace, it reports success.
+    const printed = join(workDir, 'print.pdf');
+    await runChrome(chrome, htmlPath, printed);
+    try {
+      writeFileSync(pdfPath, readFileSync(printed));
+    } catch (err) {
+      throw new Error(`Could not write ${pdfPath}: ${err.message.split(',')[0]}`);
+    }
   } finally {
     removeTempDir(workDir);
   }
+  written.set(fileId(statSync(pdfPath)), input);
   return pdfPath;
 }
 
@@ -275,10 +312,10 @@ async function main() {
   }
   const { values: opts, positionals: files } = parsed;
   const config = readConfig();
-  const defaultStyle = STYLES[config.style] ? config.style : FALLBACK_STYLE;
+  const defaultStyle = isStyle(config.style) ? config.style : FALLBACK_STYLE;
 
   if (opts['set-style'] !== undefined) {
-    if (!STYLES[opts['set-style']]) unknownStyle(opts['set-style']);
+    if (!isStyle(opts['set-style'])) unknownStyle(opts['set-style']);
     writeConfig({ ...config, style: opts['set-style'] });
     console.log(`Default style is now "${opts['set-style']}".`);
     process.exit(0);
@@ -291,11 +328,15 @@ async function main() {
     console.log(usage(defaultStyle));
     process.exit(opts.help ? 0 : 2);
   }
-  if (config.style && !STYLES[config.style]) {
+  if (config.style && !isStyle(config.style)) {
     console.error(`md2pdf: config style "${config.style}" no longer exists; using ${FALLBACK_STYLE}`);
   }
   opts.style ??= defaultStyle;
-  if (!STYLES[opts.style]) unknownStyle(opts.style);
+  if (!isStyle(opts.style)) unknownStyle(opts.style);
+  if (!isPageSize(opts['page-size'])) {
+    console.error(`md2pdf: unknown page size "${opts['page-size']}". Use one of ${PAPER.join(', ')}, alone or with "landscape", or a width and height such as "5in 8in"`);
+    process.exit(2);
+  }
   if (opts.output && files.length > 1) {
     console.error('md2pdf: --output can only be used with a single input file');
     process.exit(2);
@@ -304,9 +345,10 @@ async function main() {
   const chrome = findChrome();
   if (!katex) console.error(`md2pdf: KaTeX isn't installed, so formulas print as their source; run ${join(ROOT, 'install.sh')} again`);
   let failed = 0;
+  const written = new Map();
   for (const file of files) {
     try {
-      const pdf = await convert(file, opts, chrome);
+      const pdf = await convert(file, opts, chrome, written);
       console.log(pdf);
       if (opts.open) spawn('open', [pdf], { stdio: 'ignore', detached: true }).unref();
     } catch (err) {
