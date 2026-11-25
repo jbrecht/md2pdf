@@ -50,6 +50,8 @@ md2pdf notes.md --css my.css    # layer extra CSS on top of the style (its url()
 md2pdf notes.md --html          # also write the intermediate HTML (for tweaking CSS)
 ```
 
+A `--css` file's `@import`s resolve against it too. The rules they import come before the style, so where they and the style set the same thing equally specifically, the style wins; rules written in the file itself win.
+
 From Finder, a single file opens in Preview when done; multiple files show a notification.
 
 ## Styles
