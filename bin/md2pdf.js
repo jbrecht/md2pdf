@@ -11,7 +11,7 @@ import { createRequire } from 'node:module';
 
 import hljs from 'highlight.js';
 import { buildDocument, createRenderer, titleOf } from '../lib/render.js';
-import { rewriteUrls } from '../lib/css.js';
+import { rewriteUrls, splitImports } from '../lib/css.js';
 import { PAPER, isPageSize } from '../lib/page-size.js';
 
 const require = createRequire(import.meta.url);
@@ -118,9 +118,9 @@ function findChrome() {
   return found;
 }
 
-// A stylesheet's text, with its relative url()s (a style's bundled fonts, say) made absolute: inlined
-// into the page, they would otherwise resolve against the Markdown file's folder. Warns once about each
-// file they name that doesn't exist.
+// A stylesheet's text, with its relative url()s and @imports (a style's bundled fonts, say) made absolute:
+// inlined into the page, they would otherwise resolve against the Markdown file's folder. Warns once about
+// each file they name that doesn't exist.
 const warned = new Set();
 function readCss(file) {
   return rewriteUrls(readFileSync(file, 'utf8'), (ref) => {
@@ -143,7 +143,11 @@ function readCss(file) {
 function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
   const bodyHtml = createRenderer({ hljs, ...(katex && { math: { katex } }) }).render(markdown);
   const math = /<eqn?>/.test(bodyHtml) ? [readCss(MATH_CSS) + EQUATION_NUMBERS] : [];
-  const css = [...STYLES[style].map(readCss), ...math, ...(extraCss ? [readCss(extraCss)] : [])].join('\n');
+  // An @import counts only before every other rule, so the --css file's @imports lead the page's CSS: the
+  // style then wins ties with the rules they import, while the file's own rules still follow the style.
+  const extra = extraCss ? splitImports(readCss(extraCss)) : null;
+  const css = [...(extra ? extra.head : []), ...STYLES[style].map(readCss), ...math, ...(extra ? [extra.rest] : [])].join('\n');
+  const loadFonts = `() => document.fonts.forEach((f) => f.load().catch(() => {}))`;
   return buildDocument({
     bodyHtml,
     title,
@@ -151,9 +155,11 @@ function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
     pageSize,
     // <base> makes relative image/link paths resolve against the Markdown file's folder.
     // Chrome loads a font used only in a page header or footer too late for the PDF, so start every
-    // declared font loading now; the PDF waits for those loads with the rest of the page.
+    // declared font loading now; the PDF waits for those loads with the rest of the page. An imported
+    // stylesheet's fonts may not be declared until the page has loaded, so they start then.
     head: `<base href="${pathToFileURL(baseDir + '/').href}">
-<script>document.addEventListener('DOMContentLoaded', () => document.fonts.forEach((f) => f.load().catch(() => {})));</script>`,
+<script>document.addEventListener('DOMContentLoaded', ${loadFonts});</script>${extra?.head.length ? `
+<script>addEventListener('load', ${loadFonts});</script>` : ''}`,
   });
 }
 
