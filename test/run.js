@@ -1256,11 +1256,17 @@ test('every style trims the space below the last block of a printed document', (
   for (const style of STYLE_NAMES) assert.match(readFileSync(join(ROOT, 'styles', 'print', `${style}.css`), 'utf8'), rule, style);
 });
 
-// A closed section with a paragraph in it, one whose body is bare text, a paragraph, and a quote that
-// ends with a section.
+// A closed section with a paragraph and a closed section in it, one whose body is bare text, a paragraph,
+// and a quote that ends with a section.
 const DETAILS_DOC = `<details><summary>Show the proof</summary>
 
 The hidden paragraph.
+
+<details><summary>A lemma</summary>
+
+The nested paragraph.
+
+</details>
 
 </details>
 
@@ -1289,28 +1295,46 @@ test('every style prints a collapsed section open, its summary kept with its bod
       writeFileSync(join(dir, 'd.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head>
 <body><article class="markdown-body">${body}</article>
 <script>
-  const [proof, answer] = document.querySelectorAll('details');
+  const sections = [...document.querySelectorAll('details')];
+  const [proof, , answer] = sections;
   const bare = document.createRange();
   bare.selectNodeContents(answer.lastChild);
   const summary = getComputedStyle(proof.querySelector('summary'));
   window.probeOut = {
     // Chrome lays out a closed section's content when asked for its size, so ask whether it is visible
     // and whether the section is taller than its summary.
-    shown: proof.querySelector('p').checkVisibility() &&
-      [proof, answer].every((d) => d.getBoundingClientRect().height > d.querySelector('summary').getBoundingClientRect().height + 5),
+    shown: [...document.querySelectorAll('details p')].every((p) => p.checkVisibility()) &&
+      sections.every((d) => d.getBoundingClientRect().height > d.querySelector('summary').getBoundingClientRect().height + 5),
     marker: summary.listStyleType,
     breakAfter: summary.breakAfter,
     gap: document.querySelector('details + p').getBoundingClientRect().top - bare.getBoundingClientRect().bottom,
+    paragraphSpace: parseFloat(getComputedStyle(document.querySelector('details + p')).marginBottom),
     // The space below a section is between it and the next block, not inside a quote's box.
     lastMargin: getComputedStyle(document.querySelector('blockquote details')).marginBottom,
   };
 </script></body></html>`);
-      const { shown, marker, breakAfter, gap, lastMargin } = probeInChrome(join(dir, 'd.html'), dir);
+      const { shown, marker, breakAfter, gap, paragraphSpace, lastMargin } = probeInChrome(join(dir, 'd.html'), dir);
       assert.ok(shown, `${style} hides a collapsed section`);
       assert.equal(marker, 'disclosure-open', style);
       assert.equal(breakAfter, 'avoid', style);
-      assert.ok(gap > 4, `${style}: ${gap}px between a section's bare text and the paragraph after it`);
+      assert.ok(gap >= paragraphSpace / 2, `${style}: ${gap}px between a section's bare text and the paragraph after it, where paragraphs have ${paragraphSpace}px`);
       assert.equal(lastMargin, '0px', `${style}: space below a section at the end of a quote`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the CLI prints all of a collapsed section in every style (#102)', () => {
+  // Closed, the section is one line; open, its 80 paragraphs run onto a second page.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const paragraphs = Array.from({ length: 80 }, (_, i) => `Paragraph ${i + 1} of the proof.`).join('\n\n');
+    writeFileSync(join(dir, 'long.md'), `<details><summary>Proof</summary>\n\n${paragraphs}\n\n</details>\n`);
+    for (const style of STYLE_NAMES) {
+      const r = run('-s', style, '-o', join(dir, `${style}.pdf`), join(dir, 'long.md'));
+      assert.equal(r.status, 0, r.stderr);
+      assert.ok(pageCount(join(dir, `${style}.pdf`)) >= 2, `${style} prints one page`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -1951,6 +1975,7 @@ test('Safari prints a collapsed section open in every style (#102)', { skip: !sw
     for (const style of STYLE_NAMES) {
       const text = readFileSync(join(dir, style, 'doc.webkit.txt'), 'utf8');
       assert.match(text, /The hidden paragraph\./, style);
+      assert.match(text, /The nested paragraph\./, style);
       assert.match(text, /Forty-two/, style);
     }
   } finally {
