@@ -12,6 +12,7 @@ import { createRequire } from 'node:module';
 import hljs from 'highlight.js';
 import { buildDocument, createRenderer, titleOf } from '../lib/render.js';
 import { rewriteUrls } from '../lib/css.js';
+import { PAPER, isPageSize } from '../lib/page-size.js';
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -36,19 +37,6 @@ const STYLES = {
 const FALLBACK_STYLE = 'github';
 // Not STYLES[name], which is truthy for names every object inherits, such as toString.
 const isStyle = (name) => typeof name === 'string' && Object.hasOwn(STYLES, name);
-// The @page sizes md2pdf takes: auto, a paper name, an orientation or both, or one or two lengths. Chrome
-// prints a size it can't read at Letter without a word. It also reads calc() and newer units, which
-// aren't taken here.
-const PAPER = ['a5', 'a4', 'a3', 'b5', 'b4', 'jis-b5', 'jis-b4', 'letter', 'legal', 'ledger'];
-const ORIENTATION = ['portrait', 'landscape'];
-const LENGTH = /^\+?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(?:in|cm|mm|q|pt|pc|px|em|rem|ex|ch|vw|vh|vmin|vmax)$/;
-function isPageSize(size) {
-  const words = size.trim().toLowerCase().split(/\s+/);
-  if (words.length > 2) return false;
-  if (words.every((w) => LENGTH.test(w)) || size.trim().toLowerCase() === 'auto') return true;
-  const count = (list) => words.filter((w) => list.includes(w)).length;
-  return count(PAPER) <= 1 && count(ORIENTATION) <= 1 && count(PAPER) + count(ORIENTATION) === words.length;
-}
 // A checkout installed before KaTeX was a dependency has none until install.sh runs again; it still converts.
 const katex = await import('katex').then(
   (m) => m.default,

@@ -126,11 +126,13 @@ const html = buildDocument({
 });
 ```
 
+`pageSize` is the page size the CLI's `--page-size` takes, Letter by default: `auto`; `portrait` or `landscape`; a paper name (`a5`, `a4`, `a3`, `b5`, `b4`, `jis-b5`, `jis-b4`, `letter`, `legal`, `ledger`) alone or with `portrait` or `landscape`; or one or two lengths in `in`, `cm`, `mm`, `q`, `pt`, `pc`, `px`, `em`, `rem`, `ex`, `ch`, `vw`, `vh`, `vmin` or `vmax`, such as `5in 8in` (no `calc()` or newer units). Case doesn't matter. Anything else, including a value that isn't a string, throws a `TypeError`, so check a value you didn't choose with `isPageSize(size)` first. `css` and `head` (HTML added to the page's `<head>`) are written into the page as given, so they must come from you, not from a visitor.
+
 A style that [bundles fonts](#adding-a-style) loads them relative to its stylesheet, so a page that inlines the CSS must rewrite those `url()`s, as the CLI does, or let a bundler do it (in Vite, `?inline`, not `?raw`). Before printing, start every font loading and wait: a font used only in a page header may otherwise not be requested until printing starts, and the PDF falls back, as it does in headless Chrome. `await Promise.allSettled([...document.fonts].map((f) => f.load()))`.
 
 | Export | What it is |
 | ------ | ---------- |
-| `@threepenny/md2pdf/render` | `createRenderer({ hljs, math?, html?, idPrefix?, highlightBudget? })`, `buildDocument(...)`, `titleOf(markdown, fallback)` (the first `#` heading's text as it renders, without Markdown syntax, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)` (the text of the first `<h1>` in rendered HTML, as a browser shows it, formulas as their TeX) |
+| `@threepenny/md2pdf/render` | `createRenderer({ hljs, math?, html?, idPrefix?, highlightBudget? })`, `buildDocument({ bodyHtml, title, css, pageSize?, head? })`, `isPageSize(size)` (whether `buildDocument` takes `size` as its `pageSize`), `titleOf(markdown, fallback)` (the first `#` heading's text as it renders, without Markdown syntax, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)` (the text of the first `<h1>` in rendered HTML, as a browser shows it, formulas as their TeX) |
 | `@threepenny/md2pdf/styles` | `pageMargins`: each style's `@page` margin at default spacing, e.g. `pageMargins.classic` is `'1in 1.1in 0.9in'` |
 | `@threepenny/md2pdf/styles/<name>.css` | Each style's on-screen look, scoped to `.markdown-body`. For `github`, load `github-markdown-css/github-markdown-light.css` first |
 | `@threepenny/md2pdf/styles/print/<name>.css` | Each style's print rules: page margins, running headers and page numbers, and, in Safari, no space below the document's last block. Load it after the on-screen file, only in a page that holds nothing but the document |

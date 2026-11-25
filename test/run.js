@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
-import { buildDocument, createRenderer, cssString, headingText, titleOf } from '../lib/render.js';
+import { buildDocument, createRenderer, cssString, headingText, isPageSize, titleOf } from '../lib/render.js';
 import { pageMargins } from '../lib/styles.js';
 import { relativeUrls, rewriteUrls } from '../lib/css.js';
 import mathRules from '../lib/math.js';
@@ -904,9 +904,29 @@ test('two inputs that would write the same PDF are reported (#103)', () => {
   }
 });
 
+// Page sizes the CLI and buildDocument refuse: unknown words, malformed lengths, CSS that would leave the
+// @page rule or the <style> element (#111), whitespace CSS doesn't treat as whitespace, and characters that
+// only look like the ones taken.
+const BAD_PAGE_SIZES = [
+  'Bogus', 'A4 sideways', '5 8', '5.in 8in', '5in -8in', '5in 8in 2in', 'auto landscape', 'A4 A3', '', ' ',
+  'Letter; } body { color: red', 'A4; } body { display:none', 'A4 }</style><script>x</script>', '</style>',
+  'url(https://example.com/x)', 'A4;', 'A4 /**/', '5in 8in !important', '"A4"', 'calc(5in) 8in', 'A4\\;',
+  'A4\u00a0landscape', 'A4\u000blandscape', 'A4\u2028landscape', '\ufeffA4', 'A\u212a', '５in 8in',
+];
+// A sample of the sizes the CLI took before #111 and still takes, paper names in three cases.
+const GOOD_PAGE_SIZES = [
+  ...['a5', 'a4', 'a3', 'b5', 'b4', 'jis-b5', 'jis-b4', 'letter', 'legal', 'ledger'].flatMap((paper) =>
+    [paper, paper.toUpperCase(), paper[0].toUpperCase() + paper.slice(1)].flatMap((name) => [
+      name, `${name} portrait`, `${name} landscape`, `landscape ${name}`, `Portrait ${name}`,
+    ]),
+  ),
+  'auto', 'AUTO', ' auto ', 'portrait', 'landscape', 'Landscape', '5in 8in', '148mm 210mm', '+5.0in .8e1in',
+  '10em 20rem', '50vw 50vh', '5in', '0in', '1cm\t2cm', '1q\n2pc', '3pt\r\n4px', '2ex\f3ch', '1vmin 1vmax',
+];
+
 test('an unknown page size is an error; names, orientations and lengths are taken (#103)', () => {
   const dir = workspace();
-  for (const size of ['Bogus', 'A4 sideways', '5 8', '5.in 8in', '5in -8in', '5in 8in 2in', 'auto landscape', 'A4 A3', 'Letter; } body { color: red', '']) {
+  for (const size of BAD_PAGE_SIZES) {
     const r = run('-p', size, join(dir, 'sample.md'));
     assert.equal(r.status, 2, size);
     assert.match(r.stderr, /unknown page size/);
@@ -926,6 +946,37 @@ test('an unknown page size is an error; names, orientations and lengths are take
   assert.deepEqual(box('10em 20rem'), [120, 240]);
   assert.deepEqual(box('50vw 50vh'), [306, 396]);
   assert.deepEqual(box('auto'), [612, 792]);
+  // The size is written as given, not tidied, so a PDF made before #111 prints the same.
+  assert.equal(run('--html', '-o', join(dir, 'sized.pdf'), '-p', 'A4  Landscape', join(dir, 'sample.md')).status, 0);
+  assert.match(readFileSync(join(dir, 'sized.html'), 'utf8'), /@page \{ size: A4 {2}Landscape; \}/);
+});
+
+test('buildDocument takes only the page sizes the CLI takes, and writes them as given (#111)', () => {
+  const doc = (pageSize) => buildDocument({ bodyHtml: '<p>x</p>', title: 't', css: '', pageSize });
+  for (const size of [...BAD_PAGE_SIZES, null, 5, true, ['A4'], new String('A4'), { toString: () => 'A4; } body { color: red' }]) {
+    assert.throws(() => doc(size), TypeError, JSON.stringify(size));
+    assert.equal(isPageSize(size), false, JSON.stringify(size));
+  }
+  for (const size of GOOD_PAGE_SIZES) {
+    assert.ok(doc(size).includes(`@page { size: ${size}; }`), JSON.stringify(size));
+    assert.equal(isPageSize(size), true, JSON.stringify(size));
+  }
+  assert.match(doc(undefined), /@page \{ size: Letter; \}/);
+  // The message names the value, with < > & escaped for a host that shows it as HTML, and cut short.
+  assert.throws(() => doc('A4 }</style><script>x</script>&'), {
+    message: /^buildDocument: pageSize "A4 }\\u003c\/style\\u003e\\u003cscript\\u003ex\\u003c\/script\\u003e\\u0026" isn't a page size/,
+  });
+  // So are line and paragraph separators, C1 controls and bidi overrides, which can forge or reorder log lines.
+  assert.throws(() => doc('a\u2028b\u2029c\u0085d\u009b31m\u202ee\u00a0'), {
+    message: /pageSize "a\\u2028b\\u2029c\\u0085d\\u009b31m\\u202ee\\u00a0" isn't/,
+  });
+  assert.throws(() => doc('x'.repeat(500)), (err) => err.message.includes(`"${'x'.repeat(80)}…" isn't`));
+  assert.throws(() => doc(null), { message: /pageSize null isn't/ });
+  assert.throws(() => doc({}), { message: /pageSize an object isn't/ });
+  assert.throws(() => doc(['A4']), { message: /pageSize an object isn't/ });
+  const { proxy, revoke } = Proxy.revocable({}, {});
+  revoke();
+  assert.throws(() => doc(proxy), { message: /pageSize an object isn't/ });
 });
 
 test('a Chrome that fails to start leaves nothing in the temp folder', () => {
