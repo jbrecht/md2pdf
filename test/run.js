@@ -377,7 +377,8 @@ test('a displayed formula wider than its column shrinks to fit it, in every styl
     // Running the script again, even while a formula is shrunk, changes nothing.
     const sizes = () => displays.map((display) => display.firstElementChild.style.fontSize);
     const before = sizes();
-    if (typeof fitFormulas === 'function') {
+    out.hasFit = typeof fitFormulas;
+    if (out.hasFit === 'function') {
       article.style.width = '300px';
       fitFormulas();
       article.style.width = '';
@@ -396,9 +397,10 @@ test('a displayed formula wider than its column shrinks to fit it, in every styl
   };
 </script></body>`;
       writeFileSync(join(dir, `${style}.html`), readFileSync(join(dir, `${style}.html`), 'utf8').replace('</body>', probe));
-      const { problems, rerun, shortSize, styleSize, cellContainer, count } = probeInChrome(join(dir, `${style}.html`), dir, { afterLoad: true });
+      const { problems, hasFit, rerun, shortSize, styleSize, cellContainer, count } = probeInChrome(join(dir, `${style}.html`), dir, { afterLoad: true });
       assert.equal(count, 9, `${style}: formulas found`);
       assert.deepEqual(problems, [], `${style}: ${problems.length} problems, such as ${JSON.stringify(problems.slice(0, 3))}`);
+      assert.equal(hasFit, 'function', `${style}: the page runs fitFormulas`);
       assert.equal(rerun, 'same', style);
       assert.equal(shortSize, styleSize, `${style}: a formula that fits keeps its size`);
       assert.equal(cellContainer, '', style);
@@ -1435,9 +1437,10 @@ test('every style prints a collapsed section open, its summary kept with its bod
       assert.ok(shown, `${style} hides a collapsed section`);
       assert.equal(marker, 'disclosure-open', style);
       assert.equal(breakAfter, 'avoid', style);
-      assert.ok(gap >= paragraphSpace / 2, `${style}: ${gap}px between a section's bare text and the paragraph after it, where paragraphs have ${paragraphSpace}px`);
+      // A paragraph's space, plus the little of its last line that lies below the text.
+      assert.ok(gap >= paragraphSpace && gap <= paragraphSpace + 4, `${style}: ${gap}px between a section's bare text and the paragraph after it, where paragraphs have ${paragraphSpace}px`);
       assert.equal(lastMargin, '0px', `${style}: space below a section at the end of a quote`);
-      assert.ok(itemGap >= paragraphSpace / 2, `${style}: ${itemGap}px between a section's bare text and the next list item, where paragraphs have ${paragraphSpace}px`);
+      assert.ok(itemGap >= paragraphSpace && itemGap <= paragraphSpace + 4, `${style}: ${itemGap}px between a section's bare text and the next list item, where paragraphs have ${paragraphSpace}px`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
