@@ -10,7 +10,8 @@ import { parseArgs } from 'node:util';
 import { createRequire } from 'node:module';
 
 import hljs from 'highlight.js';
-import { buildDocument, createRenderer, fitFormulas, titleOf } from '../lib/render.js';
+import { buildDocument, createRenderer, titleOf } from '../lib/render.js';
+import { fitFormulas } from '../lib/fit.js';
 import { rewriteUrls } from '../lib/css.js';
 
 const require = createRequire(import.meta.url);
