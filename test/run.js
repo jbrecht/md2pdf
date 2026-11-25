@@ -289,7 +289,7 @@ test('the CLI adds the math stylesheet when every formula is an error', () => {
 
 const longSum = (v, n) => Array.from({ length: n }, (_, i) => `${v}_{${i + 1}}`).join(' + ');
 // Displayed formulas: one wider than any column, one with an equation number, one in a quote, one that
-// fits and one in a table cell.
+// fits, one in a table cell and one numbered with \tag.
 const FIT_DOC = `# Formulas
 
 $$
@@ -307,6 +307,10 @@ $$E = mc^2$$
 | a | b |
 |--|--|
 | $$x+y$$ | 2 |
+
+$$
+${longSum('d', 22)} = V \\tag{42}
+$$
 `;
 
 test('a displayed formula wider than its column shrinks to fit it, in every style (#115)', () => {
@@ -319,7 +323,7 @@ test('a displayed formula wider than its column shrinks to fit it, in every styl
       const probe = `<script>
   window.probeOut = () => {
     const article = document.querySelector('.markdown-body');
-    const [long, numbered, quoted, short, cell] = document.querySelectorAll('.katex-display');
+    const [long, numbered, quoted, short, cell, tagged] = document.querySelectorAll('.katex-display');
     // Where the formula's own text reaches, not its box, which is as wide as the column.
     const reach = (display) => {
       const range = document.createRange();
@@ -330,7 +334,7 @@ test('a displayed formula wider than its column shrinks to fit it, in every styl
     // Other columns, as a printed page has, without running the script again.
     for (let width = 300; width <= 760; width += 10) {
       article.style.width = width + 'px';
-      for (const [name, display] of Object.entries({ long, numbered, quoted, short })) {
+      for (const [name, display] of Object.entries({ long, numbered, quoted, short, tagged })) {
         // The section, which is as wide as the column; a numbered formula's own box grows with it.
         const box = display.closest('section').getBoundingClientRect();
         const text = reach(display);
@@ -338,6 +342,11 @@ test('a displayed formula wider than its column shrinks to fit it, in every styl
           out.overflows.push(\`\${width}px \${name}: text \${text.left.toFixed(1)}–\${text.right.toFixed(1)}, column \${box.left.toFixed(1)}–\${box.right.toFixed(1)}\`);
         }
       }
+      // The \\tag number clears the formula.
+      const bases = tagged.querySelectorAll('.katex-html > .katex-base');
+      const tag = tagged.querySelector('.katex-tag').getBoundingClientRect();
+      const end = bases[bases.length - 1].getBoundingClientRect().right;
+      if (end > tag.left + 0.5) out.overflows.push(\`\${width}px tagged: formula ends at \${end.toFixed(1)}, its number starts at \${tag.left.toFixed(1)}\`);
     }
     article.style.width = '';
     // A formula that fits keeps the size the style gives it.
