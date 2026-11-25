@@ -12,7 +12,8 @@ import { createRequire } from 'node:module';
 import hljs from 'highlight.js';
 import { buildDocument, createRenderer, titleOf } from '../lib/render.js';
 import { fitFormulas } from '../lib/fit.js';
-import { rewriteUrls } from '../lib/css.js';
+import { rewriteUrls, splitImports } from '../lib/css.js';
+import { PAPER, isPageSize } from '../lib/page-size.js';
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -37,19 +38,6 @@ const STYLES = {
 const FALLBACK_STYLE = 'github';
 // Not STYLES[name], which is truthy for names every object inherits, such as toString.
 const isStyle = (name) => typeof name === 'string' && Object.hasOwn(STYLES, name);
-// The @page sizes md2pdf takes: auto, a paper name, an orientation or both, or one or two lengths. Chrome
-// prints a size it can't read at Letter without a word. It also reads calc() and newer units, which
-// aren't taken here.
-const PAPER = ['a5', 'a4', 'a3', 'b5', 'b4', 'jis-b5', 'jis-b4', 'letter', 'legal', 'ledger'];
-const ORIENTATION = ['portrait', 'landscape'];
-const LENGTH = /^\+?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(?:in|cm|mm|q|pt|pc|px|em|rem|ex|ch|vw|vh|vmin|vmax)$/;
-function isPageSize(size) {
-  const words = size.trim().toLowerCase().split(/\s+/);
-  if (words.length > 2) return false;
-  if (words.every((w) => LENGTH.test(w)) || size.trim().toLowerCase() === 'auto') return true;
-  const count = (list) => words.filter((w) => list.includes(w)).length;
-  return count(PAPER) <= 1 && count(ORIENTATION) <= 1 && count(PAPER) + count(ORIENTATION) === words.length;
-}
 // A checkout installed before KaTeX was a dependency has none until install.sh runs again; it still converts.
 const katex = await import('katex').then(
   (m) => m.default,
@@ -131,9 +119,9 @@ function findChrome() {
   return found;
 }
 
-// A stylesheet's text, with its relative url()s (a style's bundled fonts, say) made absolute: inlined
-// into the page, they would otherwise resolve against the Markdown file's folder. Warns once about each
-// file they name that doesn't exist.
+// A stylesheet's text, with its relative url()s and @imports (a style's bundled fonts, say) made absolute:
+// inlined into the page, they would otherwise resolve against the Markdown file's folder. Warns once about
+// each file they name that doesn't exist.
 const warned = new Set();
 function readCss(file) {
   return rewriteUrls(readFileSync(file, 'utf8'), (ref) => {
@@ -156,7 +144,11 @@ function readCss(file) {
 function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
   const bodyHtml = createRenderer({ hljs, ...(katex && { math: { katex } }) }).render(markdown);
   const math = /<eqn?>/.test(bodyHtml) ? [readCss(MATH_CSS) + EQUATION_NUMBERS] : [];
-  const css = [...STYLES[style].map(readCss), ...math, ...(extraCss ? [readCss(extraCss)] : [])].join('\n');
+  // An @import counts only before every other rule, so the --css file's @imports lead the page's CSS: the
+  // style then wins ties with the rules they import, while the file's own rules still follow the style.
+  const extra = extraCss ? splitImports(readCss(extraCss)) : null;
+  const css = [...(extra ? extra.head : []), ...STYLES[style].map(readCss), ...math, ...(extra ? [extra.rest] : [])].join('\n');
+  const loadFonts = `() => document.fonts.forEach((f) => f.load().catch(() => {}))`;
   return buildDocument({
     bodyHtml,
     title,
@@ -164,9 +156,11 @@ function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
     pageSize,
     // <base> makes relative image/link paths resolve against the Markdown file's folder.
     // Chrome loads a font used only in a page header or footer too late for the PDF, so start every
-    // declared font loading now; the PDF waits for those loads with the rest of the page.
+    // declared font loading now; the PDF waits for those loads with the rest of the page. An imported
+    // stylesheet's fonts may not be declared until the page has loaded, so they start then.
     head: `<base href="${pathToFileURL(baseDir + '/').href}">
-<script>document.addEventListener('DOMContentLoaded', () => document.fonts.forEach((f) => f.load().catch(() => {})));</script>${
+<script>document.addEventListener('DOMContentLoaded', ${loadFonts});</script>${extra?.head.length ? `
+<script>addEventListener('load', ${loadFonts});</script>` : ''}${
       // A displayed formula wider than the column shrinks to fit, once its fonts have loaded. It fits
       // whatever column it ends up in, so the printed page needs no second run.
       /<eqn>/.test(bodyHtml)
@@ -252,15 +246,25 @@ function runChrome(chrome, htmlPath, pdfPath) {
 // A file's identity, whatever name reaches it: names can differ by case, a symlink or a hard link.
 const fileId = (stat) => `${stat.dev}:${stat.ino}`;
 
-// `written` maps each PDF this run has written, by fileId, to the input it came from.
-async function convert(input, opts, chrome, written) {
+// `written` maps each PDF this run has written, by fileId, to the input it came from;
+// `inputs` maps each of this run's inputs, by fileId, to its name.
+async function convert(input, opts, chrome, written, inputs) {
   const inputPath = resolve(input);
   if (!existsSync(inputPath)) throw new Error(`No such file: ${input}`);
+  const source = fileId(statSync(inputPath));
   const stem = basename(inputPath, extname(inputPath));
   const pdfPath = resolve(opts.output ?? join(dirname(inputPath), `${stem}.pdf`));
   const target = statSync(pdfPath, { throwIfNoEntry: false });
-  if (target && fileId(target) === fileId(statSync(inputPath))) {
+  if (target && fileId(target) === source) {
     throw new Error('The PDF would replace the file it is made from; give another path with --output');
+  }
+  const htmlPath = opts.html && pdfPath.replace(/\.pdf$/i, '') + '.html';
+  const htmlTarget = htmlPath && statSync(htmlPath, { throwIfNoEntry: false });
+  if (htmlTarget && fileId(htmlTarget) === source) {
+    throw new Error('The HTML would replace the file it is made from; give another path with --output');
+  }
+  if (htmlTarget && inputs.has(fileId(htmlTarget))) {
+    throw new Error(`The HTML would replace ${inputs.get(fileId(htmlTarget))}, another input; convert it alone with --output`);
   }
   if (target && written.has(fileId(target))) {
     throw new Error(`${pdfPath} was already written from ${written.get(fileId(target))}; convert it alone with --output`);
@@ -280,12 +284,12 @@ async function convert(input, opts, chrome, written) {
 
   const workDir = makeTempDir('md2pdf-');
   try {
-    const htmlPath = join(workDir, `${stem}.html`);
-    writeFileSync(htmlPath, html);
-    if (opts.html) writeFileSync(pdfPath.replace(/\.pdf$/i, '') + '.html', html);
+    const page = join(workDir, `${stem}.html`);
+    writeFileSync(page, html);
+    if (htmlPath) writeFileSync(htmlPath, html);
     // Chrome prints into the temp folder: printing over a PDF it can't replace, it reports success.
     const printed = join(workDir, 'print.pdf');
-    await runChrome(chrome, htmlPath, printed);
+    await runChrome(chrome, page, printed);
     try {
       writeFileSync(pdfPath, readFileSync(printed));
     } catch (err) {
@@ -355,9 +359,14 @@ async function main() {
   if (!katex) console.error(`md2pdf: KaTeX isn't installed, so formulas print as their source; run ${join(ROOT, 'install.sh')} again`);
   let failed = 0;
   const written = new Map();
+  const inputs = new Map();
+  for (const file of files) {
+    const stat = statSync(resolve(file), { throwIfNoEntry: false });
+    if (stat) inputs.set(fileId(stat), file);
+  }
   for (const file of files) {
     try {
-      const pdf = await convert(file, opts, chrome, written);
+      const pdf = await convert(file, opts, chrome, written, inputs);
       console.log(pdf);
       if (opts.open) spawn('open', [pdf], { stdio: 'ignore', detached: true }).unref();
     } catch (err) {

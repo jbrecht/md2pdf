@@ -50,6 +50,8 @@ md2pdf notes.md --css my.css    # layer extra CSS on top of the style (its url()
 md2pdf notes.md --html          # also write the intermediate HTML (for tweaking CSS)
 ```
 
+A `--css` file's `@import`s resolve against it too. The rules they import come before the style, so where they and the style set the same thing equally specifically, the style wins; rules written in the file itself win.
+
 From Finder, a single file opens in Preview when done; multiple files show a notification.
 
 ## Styles
@@ -99,7 +101,7 @@ The CLI resolves a stylesheet's relative `url()`s against the stylesheet, and lo
 
 End the on-screen file with the rule the other styles end with, which turns off ligatures when Safari prints: Safari's PDFs copy a ligature as the wrong characters ("The" pastes as "!e"), while Chrome's, the CLI's and on-screen text are unaffected. It belongs in the on-screen file, not the print file, because a page that embeds a style prints without the print file. On a Mac with `swiftc`, `npm test` prints every style through WebKit and checks the copied text.
 
-The text of the document's first `#` heading (empty if there is none, and a formula in it as its TeX, `$e^{i\pi}$`) is available to page margin boxes as `var(--document-title)`, e.g. `@top-left { content: var(--document-title); }`, as the `report` style does.
+The text of the document's first level-one heading, written as `#` or as an HTML `<h1>`, read as a browser shows it (empty if there is none, and a formula in it as its TeX, `$e^{i\pi}$`), is available to page margin boxes as `var(--document-title)`, e.g. `@top-left { content: var(--document-title); }`, as the `report` style does.
 
 A style declares the [shared variables](#variables) in its first rule, `:where(.markdown-body) { … }`, with a comment saying what each one does there, and uses them for every size, gap, color and font they name. Spacing follows two patterns: `line-height: calc(1 + 0.55 * var(--md2pdf-leading))` and `margin: calc(1.8em * var(--md2pdf-space)) 0 …`. `npm test` checks that each variable is declared and changes the document. Page margins aren't included: they stay in the style's `@page` rule, in `styles/print/<name>.css`.
 
@@ -126,11 +128,13 @@ const html = buildDocument({
 });
 ```
 
+`pageSize` is the page size the CLI's `--page-size` takes, Letter by default: `auto`; `portrait` or `landscape`; a paper name (`a5`, `a4`, `a3`, `b5`, `b4`, `jis-b5`, `jis-b4`, `letter`, `legal`, `ledger`) alone or with `portrait` or `landscape`; or one or two lengths in `in`, `cm`, `mm`, `q`, `pt`, `pc`, `px`, `em`, `rem`, `ex`, `ch`, `vw`, `vh`, `vmin` or `vmax`, such as `5in 8in` (no `calc()` or newer units). Case doesn't matter. Anything else, including a value that isn't a string, throws a `TypeError`, so check a value you didn't choose with `isPageSize(size)` first. `css` and `head` (HTML added to the page's `<head>`) are written into the page as given, so they must come from you, not from a visitor.
+
 A style that [bundles fonts](#adding-a-style) loads them relative to its stylesheet, so a page that inlines the CSS must rewrite those `url()`s, as the CLI does, or let a bundler do it (in Vite, `?inline`, not `?raw`). Before printing, start every font loading and wait: a font used only in a page header may otherwise not be requested until printing starts, and the PDF falls back, as it does in headless Chrome. `await Promise.allSettled([...document.fonts].map((f) => f.load()))`.
 
 | Export | What it is |
 | ------ | ---------- |
-| `@threepenny/md2pdf/render` | `createRenderer({ hljs, math?, html?, idPrefix?, highlightBudget? })`, `buildDocument(...)`, `titleOf(markdown, fallback)` (the first `#` heading's text as it renders, without Markdown syntax, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)` |
+| `@threepenny/md2pdf/render` | `createRenderer({ hljs, math?, html?, idPrefix?, highlightBudget? })`, `buildDocument({ bodyHtml, title, css, pageSize?, head? })`, `isPageSize(size)` (whether `buildDocument` takes `size` as its `pageSize`), `titleOf(markdown, fallback)` (the first `#` heading's text as it renders, without Markdown syntax, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)` (the text of the first `<h1>` in rendered HTML, as a browser shows it, formulas as their TeX) |
 | `@threepenny/md2pdf/styles` | `pageMargins`: each style's `@page` margin at default spacing, e.g. `pageMargins.classic` is `'1in 1.1in 0.9in'` |
 | `@threepenny/md2pdf/styles/<name>.css` | Each style's on-screen look, scoped to `.markdown-body`. For `github`, load `github-markdown-css/github-markdown-light.css` first |
 | `@threepenny/md2pdf/styles/print/<name>.css` | Each style's print rules: page margins, running headers and page numbers, collapsed `<details>` sections printed open, and, in Safari, no space below the document's last block. Load it after the on-screen file, only in a page that holds nothing but the document |
@@ -149,7 +153,7 @@ Every style takes the same variables, set on the `.markdown-body` element. A `--
 | `--md2pdf-background` | The document's background, white |
 | `--md2pdf-text` | Body text |
 | `--md2pdf-muted` | Secondary text, such as footnotes and captions |
-| `--md2pdf-accent` | The accent color: links, headings, list markers or callouts, depending on the style. `gothic`'s leaf ornaments stay oxblood, `sandwake`'s horizon ornament stays rust, `elvish`'s title, `#`, `##`, `####` and `#####` headings, links, quotes, note callouts, table rules and ornaments keep their own greens and gold, and `cyberpunk`'s `##` and `####` headings, links, nested bullets, list numbers, tick boxes, table headings, the title's frame, most of each rule, the quote label, note callouts and function names in code stay teal |
+| `--md2pdf-accent` | The accent color: links, headings, list markers or callouts, depending on the style, and `github`'s focus rings. `gothic`'s leaf ornaments stay oxblood, `sandwake`'s horizon ornament stays rust, `elvish`'s title, `#`, `##`, `####` and `#####` headings, links, quotes, note callouts, table rules and ornaments keep their own greens and gold, and `cyberpunk`'s `##` and `####` headings, links, nested bullets, list numbers, tick boxes, table headings, the title's frame, most of each rule, the quote label, note callouts and function names in code stay teal |
 | `--md2pdf-rule` | Rules, borders and table lines (every style but `github`) |
 | `--md2pdf-surface` | A tinted background: inline code and code blocks in `classic`, `modern`, `worksheet`, `gothic` and `elvish`, and callouts too in `classic` and `gothic`; inline code, quotes and table headings in `report`; the inside of code blocks, callouts and inline code in `sandwake`, white as designed; the title panel, inline code, code blocks, table headings and shaded table rows in `cyberpunk`. The other styles don't use it |
 | `--md2pdf-font` | The body font |

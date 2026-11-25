@@ -5,15 +5,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, mkdtempSync, readFileSync, readdirSync, existsSync, copyFileSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
-import { buildDocument, createRenderer, cssString, headingText, titleOf } from '../lib/render.js';
+import { buildDocument, createRenderer, cssString, headingText, isPageSize, titleOf } from '../lib/render.js';
 import { pageMargins } from '../lib/styles.js';
-import { relativeUrls, rewriteUrls } from '../lib/css.js';
+import { relativeUrls, rewriteUrls, splitImports } from '../lib/css.js';
 import mathRules from '../lib/math.js';
 
 const require = createRequire(import.meta.url);
@@ -631,6 +632,28 @@ test('the running header shows a formula in the first heading as its TeX (#94)',
   assert.match(doc, /--document-title: "Euler \$e\^\{i\\\\pi\}\$";/);
 });
 
+test('the running header reads a title written in raw HTML as a browser shows it (#100)', () => {
+  const md = createRenderer({ hljs });
+  const header = (src) => headingText(md.render(src));
+  assert.equal(header('<h1 align="center"><img src="logo.png" width="32">&nbsp;Project</h1>'), 'Project');
+  assert.equal(header('<h1>Caf&eacute; &mdash; menu &#169;</h1>'), 'Café — menu ©');
+  assert.equal(header('<H1>Upper</H1>'), 'Upper');
+  assert.equal(header('<!-- <h1>Draft</h1> -->\n\n# Real'), 'Real');
+  assert.equal(header('<h1 title="a>b">Attr</h1>'), 'Attr');
+  assert.equal(header('<h1 title=\'<!--\'>A <!-- b > c --> d<br/>e</h1>'), 'A  de');
+  assert.equal(header('<h10>Not a heading</h10>\n\n# Heading'), 'Heading');
+  // A quote opens an attribute value only after =.
+  assert.equal(header('<h1 class=it\'s>Title</h1>'), 'Title');
+  assert.equal(header('<h1>A <span title=don\'t data-x = "a>b">B</span> C</h1>'), 'A B C');
+  // An h1 or a comment in an attribute value isn't one, and a </h1> in a comment doesn't close the heading.
+  assert.equal(header('<p><img alt="<!--"></p>\n\n<h1>T</h1>'), 'T');
+  assert.equal(header('<p><img alt="<h1>x</h1>"></p>\n\n# Real'), 'Real');
+  assert.equal(header('<h1>A <!-- </h1> --> B</h1>'), 'A  B');
+  const doc = buildDocument({ bodyHtml: md.render('<h1>Caf&eacute; &quot;menu&quot;</h1>'), title: 't', css: '' });
+  assert.match(doc, /--document-title: "Café \\"menu\\"";/);
+  assert.equal(headingText('<h1>a'.repeat(5)), '');
+});
+
 test('the CLI takes the document title from front matter when there is no heading', () => {
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
   writeFileSync(join(dir, 'note.md'), '---\ntitle: Weekly notes\n---\n\nJust a paragraph.\n');
@@ -901,6 +924,18 @@ ${articles}
   });
 }
 
+test('the github style defines every variable its stylesheets use (#101)', () => {
+  const files = [require.resolve('github-markdown-css/github-markdown-light.css'), join(ROOT, 'styles', 'github.css'), join(ROOT, 'styles', 'print', 'github.css')];
+  const css = files.map((f) => readFileSync(f, 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+  const defined = new Set([...css.matchAll(/[{;\s](--[\w-]+)\s*:/g)].map((m) => m[1]));
+  const used = new Set([...css.matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]));
+  // An undefined variable makes its whole declaration invalid. These are left undefined, as md2pdf has
+  // always printed them: <kbd> has no border (defining it changes the PDFs; #112), and .pl-ii is never emitted.
+  const known = ['--borderColor-muted', '--fgColor-danger', '--bgColor-danger-muted'];
+  assert.deepEqual([...used].filter((v) => !defined.has(v) && !known.includes(v)), []);
+  assert.deepEqual(known.filter((v) => defined.has(v)), [], 'now defined: take it off the list');
+});
+
 test('--output writes to the given path', () => {
   const dir = workspace();
   const target = join(dir, 'custom name.pdf');
@@ -963,6 +998,28 @@ test('an input is never replaced by its own PDF (#103)', () => {
   }
 });
 
+test('--html never replaces an input with the page it renders (#110)', () => {
+  const dir = workspace();
+  const input = join(dir, 'note.html');
+  copyFileSync(join(dir, 'sample.md'), input);
+  symlinkSync(input, join(dir, 'link.html'));
+  const before = readFileSync(input, 'utf8');
+  const cases = [['--html', input], ['--html', '-o', join(dir, 'x.pdf'), join(dir, 'x.html')], ['--html', '-o', join(dir, 'link.pdf'), input]];
+  copyFileSync(input, join(dir, 'x.html'));
+  if (existsSync(join(dir, 'NOTE.HTML'))) cases.push(['--html', '-o', join(dir, 'NOTE.pdf'), input]);
+  for (const args of cases) {
+    const r = run(...args);
+    assert.equal(r.status, 1, args.join(' '));
+    assert.match(r.stderr, /The HTML would replace the file it is made from/);
+    assert.equal(readFileSync(args.at(-1), 'utf8'), before);
+  }
+  copyFileSync(input, join(dir, 'sample.html'));
+  const r = run('--html', join(dir, 'sample.md'), join(dir, 'sample.html'));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /sample\.md: The HTML would replace .*sample\.html, another input/);
+  assert.equal(readFileSync(join(dir, 'sample.html'), 'utf8'), before);
+});
+
 test('two inputs that would write the same PDF are reported (#103)', () => {
   const dir = workspace();
   copyFileSync(join(dir, 'sample.md'), join(dir, 'sample.markdown'));
@@ -985,9 +1042,29 @@ test('two inputs that would write the same PDF are reported (#103)', () => {
   }
 });
 
+// Page sizes the CLI and buildDocument refuse: unknown words, malformed lengths, CSS that would leave the
+// @page rule or the <style> element (#111), whitespace CSS doesn't treat as whitespace, and characters that
+// only look like the ones taken.
+const BAD_PAGE_SIZES = [
+  'Bogus', 'A4 sideways', '5 8', '5.in 8in', '5in -8in', '5in 8in 2in', 'auto landscape', 'A4 A3', '', ' ',
+  'Letter; } body { color: red', 'A4; } body { display:none', 'A4 }</style><script>x</script>', '</style>',
+  'url(https://example.com/x)', 'A4;', 'A4 /**/', '5in 8in !important', '"A4"', 'calc(5in) 8in', 'A4\\;',
+  'A4\u00a0landscape', 'A4\u000blandscape', 'A4\u2028landscape', '\ufeffA4', 'A\u212a', '５in 8in',
+];
+// A sample of the sizes the CLI took before #111 and still takes, paper names in three cases.
+const GOOD_PAGE_SIZES = [
+  ...['a5', 'a4', 'a3', 'b5', 'b4', 'jis-b5', 'jis-b4', 'letter', 'legal', 'ledger'].flatMap((paper) =>
+    [paper, paper.toUpperCase(), paper[0].toUpperCase() + paper.slice(1)].flatMap((name) => [
+      name, `${name} portrait`, `${name} landscape`, `landscape ${name}`, `Portrait ${name}`,
+    ]),
+  ),
+  'auto', 'AUTO', ' auto ', 'portrait', 'landscape', 'Landscape', '5in 8in', '148mm 210mm', '+5.0in .8e1in',
+  '10em 20rem', '50vw 50vh', '5in', '0in', '1cm\t2cm', '1q\n2pc', '3pt\r\n4px', '2ex\f3ch', '1vmin 1vmax',
+];
+
 test('an unknown page size is an error; names, orientations and lengths are taken (#103)', () => {
   const dir = workspace();
-  for (const size of ['Bogus', 'A4 sideways', '5 8', '5.in 8in', '5in -8in', '5in 8in 2in', 'auto landscape', 'A4 A3', 'Letter; } body { color: red', '']) {
+  for (const size of BAD_PAGE_SIZES) {
     const r = run('-p', size, join(dir, 'sample.md'));
     assert.equal(r.status, 2, size);
     assert.match(r.stderr, /unknown page size/);
@@ -1007,6 +1084,37 @@ test('an unknown page size is an error; names, orientations and lengths are take
   assert.deepEqual(box('10em 20rem'), [120, 240]);
   assert.deepEqual(box('50vw 50vh'), [306, 396]);
   assert.deepEqual(box('auto'), [612, 792]);
+  // The size is written as given, not tidied, so a PDF made before #111 prints the same.
+  assert.equal(run('--html', '-o', join(dir, 'sized.pdf'), '-p', 'A4  Landscape', join(dir, 'sample.md')).status, 0);
+  assert.match(readFileSync(join(dir, 'sized.html'), 'utf8'), /@page \{ size: A4 {2}Landscape; \}/);
+});
+
+test('buildDocument takes only the page sizes the CLI takes, and writes them as given (#111)', () => {
+  const doc = (pageSize) => buildDocument({ bodyHtml: '<p>x</p>', title: 't', css: '', pageSize });
+  for (const size of [...BAD_PAGE_SIZES, null, 5, true, ['A4'], new String('A4'), { toString: () => 'A4; } body { color: red' }]) {
+    assert.throws(() => doc(size), TypeError, JSON.stringify(size));
+    assert.equal(isPageSize(size), false, JSON.stringify(size));
+  }
+  for (const size of GOOD_PAGE_SIZES) {
+    assert.ok(doc(size).includes(`@page { size: ${size}; }`), JSON.stringify(size));
+    assert.equal(isPageSize(size), true, JSON.stringify(size));
+  }
+  assert.match(doc(undefined), /@page \{ size: Letter; \}/);
+  // The message names the value, with < > & escaped for a host that shows it as HTML, and cut short.
+  assert.throws(() => doc('A4 }</style><script>x</script>&'), {
+    message: /^buildDocument: pageSize "A4 }\\u003c\/style\\u003e\\u003cscript\\u003ex\\u003c\/script\\u003e\\u0026" isn't a page size/,
+  });
+  // So are line and paragraph separators, C1 controls and bidi overrides, which can forge or reorder log lines.
+  assert.throws(() => doc('a\u2028b\u2029c\u0085d\u009b31m\u202ee\u00a0'), {
+    message: /pageSize "a\\u2028b\\u2029c\\u0085d\\u009b31m\\u202ee\\u00a0" isn't/,
+  });
+  assert.throws(() => doc('x'.repeat(500)), (err) => err.message.includes(`"${'x'.repeat(80)}…" isn't`));
+  assert.throws(() => doc(null), { message: /pageSize null isn't/ });
+  assert.throws(() => doc({}), { message: /pageSize an object isn't/ });
+  assert.throws(() => doc(['A4']), { message: /pageSize an object isn't/ });
+  const { proxy, revoke } = Proxy.revocable({}, {});
+  revoke();
+  assert.throws(() => doc(proxy), { message: /pageSize an object isn't/ });
 });
 
 test('a Chrome that fails to start leaves nothing in the temp folder', () => {
@@ -1716,7 +1824,11 @@ test('rewriteUrls rewrites relative url()s and leaves everything else as it was'
     ["a { src: url('x y.png') }", 'a { src: url("file:///s/x y.png") }'],
     ['a { src: url( b.png ) URL(../c.png) }', 'a { src: url("file:///s/b.png") url("file:///s/../c.png") }'],
     ['a { src: url(100%.png) }', 'a { src: url("file:///s/100%.png") }'],
+    ['@import "a.css"; @import\'b c.css\' print;', '@import "file:///s/a.css"; @import "file:///s/b c.css" print;'],
   ]) assert.equal(rewrite(css), expected);
+  for (const css of ['@import "https://example.com/a.css";', '/* @import "a.css"; */', 'a { content: "@import \'b.css\'" }']) {
+    assert.equal(rewrite(css), css);
+  }
   for (const css of [
     '/* src: url("fonts/<family>/<file>.woff2") */',
     'a { content: "see url(x.png)" } b { content: \'it\\\'s url(y.png)\' }',
@@ -1727,6 +1839,26 @@ test('rewriteUrls rewrites relative url()s and leaves everything else as it was'
     ...STYLE_NAMES.flatMap((s) => [`${s}.css`, `print/${s}.css`].map((f) => readFileSync(join(ROOT, 'styles', f), 'utf8')))
       .filter((css) => relativeUrls(css).length === 0),
   ]) assert.equal(rewrite(css), css);
+});
+
+test('splitImports takes the @imports that open a stylesheet, with the @layer statements among them (#107)', () => {
+  for (const [css, head, rest] of [
+    ['﻿@charset "utf-8";\n/* a; { */\n@import url("x;y.css") screen;\n@import "b.css";\n.a {}\n@import "late.css";',
+      ['@import url("x;y.css") screen;', '@import "b.css";'], '﻿@charset "utf-8";\n/* a; { */\n\n\n.a {}\n@import "late.css";'],
+    ['@layer a, b;\n@import "x.css" layer(b);\n@IMPORT "y.css" layer(a);\n.a {}', ['@layer a, b;', '@import "x.css" layer(b);', '@IMPORT "y.css" layer(a);'], '\n\n\n.a {}'],
+    ['@import url(a.css) /* x; */ screen;\n.a {}', ['@import url(a.css) /* x; */ screen;'], '\n.a {}'],
+    ['@import url(a.css) supports(selector(:has(b)));', ['@import url(a.css) supports(selector(:has(b)));'], ''],
+    ['@import "a.css" /* end */', ['@import "a.css" /* end */;'], ''],
+    ['@import "a.css" /** x **/;', ['@import "a.css" /** x **/;'], ''],
+    ['@import url(a.css) supports(display: grid /* ) */);', ['@import url(a.css) supports(display: grid /* ) */);'], ''],
+    ['@import "x.css";\n@layer base /* reset */ {\n  html { /* type */ font-size: 16px; }\n}', ['@import "x.css";'],
+      '\n@layer base /* reset */ {\n  html { /* type */ font-size: 16px; }\n}'],
+  ]) assert.deepEqual(splitImports(css), { head, rest }, css);
+  for (const css of ['', '.a {}', '@layer a;\n.a {}', '@layer a { .b {} }\n@import "x.css";', '@import "a.css" /* unclosed',
+    '@import-x "a.css";\n.a {}', '@import "a.css"\n.a {}', '@import "x.css" /* a */\n.a { color: red /* b */; }',
+    `@import ${'url(a) '.repeat(40)}{`, `@import "a.css" ${'/**/ '.repeat(12)}{`]) {
+    assert.deepEqual(splitImports(css), { head: [], rest: css }, css);
+  }
 });
 
 // A stylesheet in a folder of its own, away from the Markdown, with the test fonts in fonts/ beside it.
@@ -1763,11 +1895,94 @@ test('a font used only in the page header still loads', () => {
 test('a stylesheet URL to a missing file is reported once, and an unreadable one is left to Chrome', () => {
   const dir = workspace();
   copyFileSync(join(dir, 'sample.md'), join(dir, 'second.md'));
-  const css = stylesheetWithFonts('@font-face { font-family: "md2pdf Gone"; src: url(fonts/gone.woff2); }\n.markdown-body { background: url(a%2Fb.png); }');
+  const css = stylesheetWithFonts('@import "gone.css";\n@font-face { font-family: "md2pdf Gone"; src: url(fonts/gone.woff2); }\n.markdown-body { background: url(a%2Fb.png); }');
   const r = run('--css', css, join(dir, 'sample.md'), join(dir, 'second.md'));
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stderr.match(/no such file: fonts\/gone\.woff2/g)?.length, 1, r.stderr);
+  assert.equal(r.stderr.match(/no such file: gone\.css/g)?.length, 1, r.stderr);
   assert.doesNotMatch(r.stderr, /a%2Fb/);
+});
+
+// A --css file, empty for now, with the given stylesheets in imports/ beside it and the test fonts in fonts/.
+function stylesheetWithImports(imports) {
+  const css = stylesheetWithFonts('');
+  mkdirSync(join(dirname(css), 'imports'));
+  for (const [name, text] of Object.entries(imports)) writeFileSync(join(dirname(css), 'imports', name), text);
+  return css;
+}
+
+test("a --css file's @imports take effect, resolved against the file, with or without url() (#107)", () => {
+  const dir = workspace();
+  const face = (file, weight) => `@font-face { font-family: "md2pdf Test"; font-weight: ${weight};
+  src: url("../fonts/comic-neue/comic-neue-latin-${file}.woff2") format("woff2"); }`;
+  const css = stylesheetWithImports({ 'regular.css': face('400-normal', 400), 'bold.css': face('700-normal', 700) });
+  writeFileSync(css, `/* Fonts. */\n@import url("imports/regular.css");\n@import "imports/bold.css" print;
+.markdown-body { font-family: "md2pdf Test", Georgia; }`);
+  const r = run('--css', css, join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, '');
+  const fonts = pdfFonts(join(dir, 'sample.pdf'));
+  for (const name of ['ComicNeue-Regular', 'ComicNeue-Bold']) assert.ok(fonts.includes(name), `${name} not in ${fonts}`);
+  // An empty --css, as from a script's unset variable, is still no stylesheet at all.
+  const empty = run('--css', '', join(dir, 'sample.md'));
+  assert.equal(empty.status, 0, empty.stderr);
+});
+
+test('a font an imported stylesheet declares and only the page header uses still loads (#107)', () => {
+  const dir = workspace();
+  const css = stylesheetWithImports({
+    'fonts.css': '@font-face { font-family: "md2pdf Test"; font-weight: 700; src: url("../fonts/comic-neue/comic-neue-latin-700-normal.woff2") format("woff2"); }',
+  });
+  writeFileSync(css, '@import "imports/fonts.css";\n@page { @top-center { content: "Header"; font-family: "md2pdf Test"; font-weight: 700; } }');
+  const r = run('--css', css, join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  const fonts = pdfFonts(join(dir, 'sample.pdf'));
+  assert.ok(fonts.includes('ComicNeue-Bold'), fonts.join(' '));
+});
+
+test("the style wins ties with a --css file's imported rules, and the file's own rules win ties with the style (#107)", () => {
+  const dir = workspace();
+  const css = stylesheetWithImports({ 'h1.css': '.markdown-body h1 { text-align: right; word-spacing: 7px; }' });
+  // classic's h1 rule sets text-align: center and letter-spacing: 0.01em.
+  writeFileSync(css, '@import "imports/h1.css";\n.markdown-body h1 { letter-spacing: 3px; }');
+  const r = run('-s', 'classic', '--css', css, '--html', join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  const html = join(dir, 'sample.html');
+  writeFileSync(html, readFileSync(html, 'utf8').replace('</body>', `<script>
+    const h1 = getComputedStyle(document.querySelector('h1'));
+    window.probeOut = { textAlign: h1.textAlign, wordSpacing: h1.wordSpacing, letterSpacing: h1.letterSpacing };
+  </script></body>`));
+  assert.deepEqual(probeInChrome(html, dir), { textAlign: 'center', wordSpacing: '7px', letterSpacing: '3px' });
+});
+
+test("a --css file's @import of a web address takes effect (#107)", async () => {
+  const font = readFileSync(join(FIXTURES, 'fonts', 'comic-neue', 'comic-neue-latin-700-normal.woff2'));
+  const server = createServer((req, res) => {
+    const headers = { 'Access-Control-Allow-Origin': '*' };
+    if (req.url === '/fonts.css') {
+      res.writeHead(200, { ...headers, 'Content-Type': 'text/css' })
+        .end('@font-face { font-family: "md2pdf Web"; src: url("/bold.woff2") format("woff2"); }');
+    } else if (req.url === '/bold.woff2') res.writeHead(200, { ...headers, 'Content-Type': 'font/woff2' }).end(font);
+    else res.writeHead(404).end();
+  });
+  // Port 0 lets the system pick a free port, so two runs of the suite can't collide.
+  await new Promise((listening) => server.listen(0, '127.0.0.1', listening));
+  try {
+    const dir = workspace();
+    const css = join(dir, 'web.css');
+    writeFileSync(css, `@import url("http://127.0.0.1:${server.address().port}/fonts.css");
+.markdown-body { font-family: "md2pdf Web", Georgia; }`);
+    // Not run(): the server answers from this process, which spawnSync would block.
+    const cli = spawn(process.execPath, [CLI, '--css', css, join(dir, 'sample.md')], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    cli.stderr.on('data', (d) => (stderr += d));
+    const status = await new Promise((done) => cli.on('close', done));
+    assert.equal(status, 0, stderr);
+    const fonts = pdfFonts(join(dir, 'sample.pdf'));
+    assert.ok(fonts.includes('ComicNeue-Bold'), fonts.join(' '));
+  } finally {
+    server.close();
+  }
 });
 
 // What breaks the rules for bundled fonts (README, "Adding a style") in a folder laid out like styles/:
@@ -2001,11 +2216,13 @@ test('the demo loads every renderer dependency, at the installed version', () =>
   for (const name of libImports) assert.ok(imports[name], `import map lacks ${name}`);
 
   const urls = [...Object.values(imports), ...[...page.matchAll(/<link [^>]*href="(https:[^"]+)"/g)].map((m) => m[1])];
-  assert.equal(urls.length, 5);
+  assert.equal(urls.length, 6);
   for (const url of urls) {
     const [, name, version] = url.match(/^https:\/\/(?:esm\.sh|cdn\.jsdelivr\.net\/npm)\/(@?[^@]+)@([^/]+)/);
     const pkg = name === '@highlightjs/cdn-assets' ? 'highlight.js' : name;
-    assert.equal(version, require(`${pkg}/package.json`).version, url);
+    // Read from node_modules: not every package exports its package.json.
+    const installed = JSON.parse(readFileSync(join(ROOT, 'node_modules', pkg, 'package.json'), 'utf8')).version;
+    assert.equal(version, installed, url);
   }
 });
 
@@ -2419,6 +2636,11 @@ test('adversarial Markdown renders in about the time markdown-it takes', async (
   ]) {
     const took = elapsed(() => titleOf(`---\ntitle: ${title}\n---\n`, 'stem'));
     if (took >= 500) slow.push(`titleOf, ${name}: ${Math.round(took)} ms`);
+  }
+  // Raw HTML in the running header, before #100.
+  for (const [name, html] of [['unclosed h1s', '<h1>a'.repeat(60000)], ['unclosed tags in an h1', `<h1>${'<a'.repeat(60000)}</h1>`]]) {
+    const took = elapsed(() => headingText(html));
+    if (took >= 500) slow.push(`headingText, ${name}: ${Math.round(took)} ms`);
   }
   assert.deepEqual(slow, []);
 });
