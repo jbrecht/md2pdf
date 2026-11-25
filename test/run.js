@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, mkdtempSync, readFileSync, readdirSync, existsSync, copyFileSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,7 +14,7 @@ import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import { buildDocument, createRenderer, cssString, headingText, titleOf } from '../lib/render.js';
 import { pageMargins } from '../lib/styles.js';
-import { relativeUrls, rewriteUrls } from '../lib/css.js';
+import { relativeUrls, rewriteUrls, splitImports } from '../lib/css.js';
 import mathRules from '../lib/math.js';
 
 const require = createRequire(import.meta.url);
@@ -1550,7 +1551,11 @@ test('rewriteUrls rewrites relative url()s and leaves everything else as it was'
     ["a { src: url('x y.png') }", 'a { src: url("file:///s/x y.png") }'],
     ['a { src: url( b.png ) URL(../c.png) }', 'a { src: url("file:///s/b.png") url("file:///s/../c.png") }'],
     ['a { src: url(100%.png) }', 'a { src: url("file:///s/100%.png") }'],
+    ['@import "a.css"; @import\'b c.css\' print;', '@import "file:///s/a.css"; @import "file:///s/b c.css" print;'],
   ]) assert.equal(rewrite(css), expected);
+  for (const css of ['@import "https://example.com/a.css";', '/* @import "a.css"; */', 'a { content: "@import \'b.css\'" }']) {
+    assert.equal(rewrite(css), css);
+  }
   for (const css of [
     '/* src: url("fonts/<family>/<file>.woff2") */',
     'a { content: "see url(x.png)" } b { content: \'it\\\'s url(y.png)\' }',
@@ -1561,6 +1566,26 @@ test('rewriteUrls rewrites relative url()s and leaves everything else as it was'
     ...STYLE_NAMES.flatMap((s) => [`${s}.css`, `print/${s}.css`].map((f) => readFileSync(join(ROOT, 'styles', f), 'utf8')))
       .filter((css) => relativeUrls(css).length === 0),
   ]) assert.equal(rewrite(css), css);
+});
+
+test('splitImports takes the @imports that open a stylesheet, with the @layer statements among them (#107)', () => {
+  for (const [css, head, rest] of [
+    ['﻿@charset "utf-8";\n/* a; { */\n@import url("x;y.css") screen;\n@import "b.css";\n.a {}\n@import "late.css";',
+      ['@import url("x;y.css") screen;', '@import "b.css";'], '﻿@charset "utf-8";\n/* a; { */\n\n\n.a {}\n@import "late.css";'],
+    ['@layer a, b;\n@import "x.css" layer(b);\n@IMPORT "y.css" layer(a);\n.a {}', ['@layer a, b;', '@import "x.css" layer(b);', '@IMPORT "y.css" layer(a);'], '\n\n\n.a {}'],
+    ['@import url(a.css) /* x; */ screen;\n.a {}', ['@import url(a.css) /* x; */ screen;'], '\n.a {}'],
+    ['@import url(a.css) supports(selector(:has(b)));', ['@import url(a.css) supports(selector(:has(b)));'], ''],
+    ['@import "a.css" /* end */', ['@import "a.css" /* end */;'], ''],
+    ['@import "a.css" /** x **/;', ['@import "a.css" /** x **/;'], ''],
+    ['@import url(a.css) supports(display: grid /* ) */);', ['@import url(a.css) supports(display: grid /* ) */);'], ''],
+    ['@import "x.css";\n@layer base /* reset */ {\n  html { /* type */ font-size: 16px; }\n}', ['@import "x.css";'],
+      '\n@layer base /* reset */ {\n  html { /* type */ font-size: 16px; }\n}'],
+  ]) assert.deepEqual(splitImports(css), { head, rest }, css);
+  for (const css of ['', '.a {}', '@layer a;\n.a {}', '@layer a { .b {} }\n@import "x.css";', '@import "a.css" /* unclosed',
+    '@import-x "a.css";\n.a {}', '@import "a.css"\n.a {}', '@import "x.css" /* a */\n.a { color: red /* b */; }',
+    `@import ${'url(a) '.repeat(40)}{`, `@import "a.css" ${'/**/ '.repeat(12)}{`]) {
+    assert.deepEqual(splitImports(css), { head: [], rest: css }, css);
+  }
 });
 
 // A stylesheet in a folder of its own, away from the Markdown, with the test fonts in fonts/ beside it.
@@ -1597,11 +1622,94 @@ test('a font used only in the page header still loads', () => {
 test('a stylesheet URL to a missing file is reported once, and an unreadable one is left to Chrome', () => {
   const dir = workspace();
   copyFileSync(join(dir, 'sample.md'), join(dir, 'second.md'));
-  const css = stylesheetWithFonts('@font-face { font-family: "md2pdf Gone"; src: url(fonts/gone.woff2); }\n.markdown-body { background: url(a%2Fb.png); }');
+  const css = stylesheetWithFonts('@import "gone.css";\n@font-face { font-family: "md2pdf Gone"; src: url(fonts/gone.woff2); }\n.markdown-body { background: url(a%2Fb.png); }');
   const r = run('--css', css, join(dir, 'sample.md'), join(dir, 'second.md'));
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stderr.match(/no such file: fonts\/gone\.woff2/g)?.length, 1, r.stderr);
+  assert.equal(r.stderr.match(/no such file: gone\.css/g)?.length, 1, r.stderr);
   assert.doesNotMatch(r.stderr, /a%2Fb/);
+});
+
+// A --css file, empty for now, with the given stylesheets in imports/ beside it and the test fonts in fonts/.
+function stylesheetWithImports(imports) {
+  const css = stylesheetWithFonts('');
+  mkdirSync(join(dirname(css), 'imports'));
+  for (const [name, text] of Object.entries(imports)) writeFileSync(join(dirname(css), 'imports', name), text);
+  return css;
+}
+
+test("a --css file's @imports take effect, resolved against the file, with or without url() (#107)", () => {
+  const dir = workspace();
+  const face = (file, weight) => `@font-face { font-family: "md2pdf Test"; font-weight: ${weight};
+  src: url("../fonts/comic-neue/comic-neue-latin-${file}.woff2") format("woff2"); }`;
+  const css = stylesheetWithImports({ 'regular.css': face('400-normal', 400), 'bold.css': face('700-normal', 700) });
+  writeFileSync(css, `/* Fonts. */\n@import url("imports/regular.css");\n@import "imports/bold.css" print;
+.markdown-body { font-family: "md2pdf Test", Georgia; }`);
+  const r = run('--css', css, join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, '');
+  const fonts = pdfFonts(join(dir, 'sample.pdf'));
+  for (const name of ['ComicNeue-Regular', 'ComicNeue-Bold']) assert.ok(fonts.includes(name), `${name} not in ${fonts}`);
+  // An empty --css, as from a script's unset variable, is still no stylesheet at all.
+  const empty = run('--css', '', join(dir, 'sample.md'));
+  assert.equal(empty.status, 0, empty.stderr);
+});
+
+test('a font an imported stylesheet declares and only the page header uses still loads (#107)', () => {
+  const dir = workspace();
+  const css = stylesheetWithImports({
+    'fonts.css': '@font-face { font-family: "md2pdf Test"; font-weight: 700; src: url("../fonts/comic-neue/comic-neue-latin-700-normal.woff2") format("woff2"); }',
+  });
+  writeFileSync(css, '@import "imports/fonts.css";\n@page { @top-center { content: "Header"; font-family: "md2pdf Test"; font-weight: 700; } }');
+  const r = run('--css', css, join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  const fonts = pdfFonts(join(dir, 'sample.pdf'));
+  assert.ok(fonts.includes('ComicNeue-Bold'), fonts.join(' '));
+});
+
+test("the style wins ties with a --css file's imported rules, and the file's own rules win ties with the style (#107)", () => {
+  const dir = workspace();
+  const css = stylesheetWithImports({ 'h1.css': '.markdown-body h1 { text-align: right; word-spacing: 7px; }' });
+  // classic's h1 rule sets text-align: center and letter-spacing: 0.01em.
+  writeFileSync(css, '@import "imports/h1.css";\n.markdown-body h1 { letter-spacing: 3px; }');
+  const r = run('-s', 'classic', '--css', css, '--html', join(dir, 'sample.md'));
+  assert.equal(r.status, 0, r.stderr);
+  const html = join(dir, 'sample.html');
+  writeFileSync(html, readFileSync(html, 'utf8').replace('</body>', `<script>
+    const h1 = getComputedStyle(document.querySelector('h1'));
+    window.probeOut = { textAlign: h1.textAlign, wordSpacing: h1.wordSpacing, letterSpacing: h1.letterSpacing };
+  </script></body>`));
+  assert.deepEqual(probeInChrome(html, dir), { textAlign: 'center', wordSpacing: '7px', letterSpacing: '3px' });
+});
+
+test("a --css file's @import of a web address takes effect (#107)", async () => {
+  const font = readFileSync(join(FIXTURES, 'fonts', 'comic-neue', 'comic-neue-latin-700-normal.woff2'));
+  const server = createServer((req, res) => {
+    const headers = { 'Access-Control-Allow-Origin': '*' };
+    if (req.url === '/fonts.css') {
+      res.writeHead(200, { ...headers, 'Content-Type': 'text/css' })
+        .end('@font-face { font-family: "md2pdf Web"; src: url("/bold.woff2") format("woff2"); }');
+    } else if (req.url === '/bold.woff2') res.writeHead(200, { ...headers, 'Content-Type': 'font/woff2' }).end(font);
+    else res.writeHead(404).end();
+  });
+  // Port 0 lets the system pick a free port, so two runs of the suite can't collide.
+  await new Promise((listening) => server.listen(0, '127.0.0.1', listening));
+  try {
+    const dir = workspace();
+    const css = join(dir, 'web.css');
+    writeFileSync(css, `@import url("http://127.0.0.1:${server.address().port}/fonts.css");
+.markdown-body { font-family: "md2pdf Web", Georgia; }`);
+    // Not run(): the server answers from this process, which spawnSync would block.
+    const cli = spawn(process.execPath, [CLI, '--css', css, join(dir, 'sample.md')], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    cli.stderr.on('data', (d) => (stderr += d));
+    const status = await new Promise((done) => cli.on('close', done));
+    assert.equal(status, 0, stderr);
+    const fonts = pdfFonts(join(dir, 'sample.pdf'));
+    assert.ok(fonts.includes('ComicNeue-Bold'), fonts.join(' '));
+  } finally {
+    server.close();
+  }
 });
 
 // What breaks the rules for bundled fonts (README, "Adding a style") in a folder laid out like styles/:
