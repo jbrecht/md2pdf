@@ -1365,7 +1365,7 @@ test('every style trims the space below the last block of a printed document', (
 });
 
 // A closed section with a paragraph and a closed section in it, one whose body is bare text, a paragraph,
-// and a quote that ends with a section.
+// a quote that ends with a section, and a list item that does, before another item.
 const DETAILS_DOC = `<details><summary>Show the proof</summary>
 
 The hidden paragraph.
@@ -1391,6 +1391,11 @@ The paragraph after.
 > The hint.
 >
 > </details>
+
+- <details><summary>Why</summary>
+  The reason.
+  </details>
+- The next item.
 `;
 
 test('every style prints a collapsed section open, its summary kept with its body (#102)', () => {
@@ -1417,16 +1422,22 @@ test('every style prints a collapsed section open, its summary kept with its bod
     breakAfter: summary.breakAfter,
     gap: document.querySelector('details + p').getBoundingClientRect().top - bare.getBoundingClientRect().bottom,
     paragraphSpace: parseFloat(getComputedStyle(document.querySelector('details + p')).marginBottom),
-    // The space below a section is between it and the next block, not inside a quote's box.
+    // The space below a section is outside a quote's box, but kept before the next list item.
     lastMargin: getComputedStyle(document.querySelector('blockquote details')).marginBottom,
+    itemGap: (() => {
+      const reason = document.createRange();
+      reason.selectNodeContents(document.querySelector('li details').lastChild);
+      return document.querySelector('li + li').getBoundingClientRect().top - reason.getBoundingClientRect().bottom;
+    })(),
   };
 </script></body></html>`);
-      const { shown, marker, breakAfter, gap, paragraphSpace, lastMargin } = probeInChrome(join(dir, 'd.html'), dir);
+      const { shown, marker, breakAfter, gap, paragraphSpace, lastMargin, itemGap } = probeInChrome(join(dir, 'd.html'), dir);
       assert.ok(shown, `${style} hides a collapsed section`);
       assert.equal(marker, 'disclosure-open', style);
       assert.equal(breakAfter, 'avoid', style);
       assert.ok(gap >= paragraphSpace / 2, `${style}: ${gap}px between a section's bare text and the paragraph after it, where paragraphs have ${paragraphSpace}px`);
       assert.equal(lastMargin, '0px', `${style}: space below a section at the end of a quote`);
+      assert.ok(itemGap >= paragraphSpace / 2, `${style}: ${itemGap}px between a section's bare text and the next list item, where paragraphs have ${paragraphSpace}px`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
