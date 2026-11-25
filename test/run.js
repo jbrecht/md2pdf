@@ -494,6 +494,28 @@ test('the running header shows a formula in the first heading as its TeX (#94)',
   assert.match(doc, /--document-title: "Euler \$e\^\{i\\\\pi\}\$";/);
 });
 
+test('the running header reads a title written in raw HTML as a browser shows it (#100)', () => {
+  const md = createRenderer({ hljs });
+  const header = (src) => headingText(md.render(src));
+  assert.equal(header('<h1 align="center"><img src="logo.png" width="32">&nbsp;Project</h1>'), 'Project');
+  assert.equal(header('<h1>Caf&eacute; &mdash; menu &#169;</h1>'), 'Café — menu ©');
+  assert.equal(header('<H1>Upper</H1>'), 'Upper');
+  assert.equal(header('<!-- <h1>Draft</h1> -->\n\n# Real'), 'Real');
+  assert.equal(header('<h1 title="a>b">Attr</h1>'), 'Attr');
+  assert.equal(header('<h1 title=\'<!--\'>A <!-- b > c --> d<br/>e</h1>'), 'A  de');
+  assert.equal(header('<h10>Not a heading</h10>\n\n# Heading'), 'Heading');
+  // A quote opens an attribute value only after =.
+  assert.equal(header('<h1 class=it\'s>Title</h1>'), 'Title');
+  assert.equal(header('<h1>A <span title=don\'t data-x = "a>b">B</span> C</h1>'), 'A B C');
+  // An h1 or a comment in an attribute value isn't one, and a </h1> in a comment doesn't close the heading.
+  assert.equal(header('<p><img alt="<!--"></p>\n\n<h1>T</h1>'), 'T');
+  assert.equal(header('<p><img alt="<h1>x</h1>"></p>\n\n# Real'), 'Real');
+  assert.equal(header('<h1>A <!-- </h1> --> B</h1>'), 'A  B');
+  const doc = buildDocument({ bodyHtml: md.render('<h1>Caf&eacute; &quot;menu&quot;</h1>'), title: 't', css: '' });
+  assert.match(doc, /--document-title: "Café \\"menu\\"";/);
+  assert.equal(headingText('<h1>a'.repeat(5)), '');
+});
+
 test('the CLI takes the document title from front matter when there is no heading', () => {
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
   writeFileSync(join(dir, 'note.md'), '---\ntitle: Weekly notes\n---\n\nJust a paragraph.\n');
@@ -764,6 +786,18 @@ ${articles}
   });
 }
 
+test('the github style defines every variable its stylesheets use (#101)', () => {
+  const files = [require.resolve('github-markdown-css/github-markdown-light.css'), join(ROOT, 'styles', 'github.css'), join(ROOT, 'styles', 'print', 'github.css')];
+  const css = files.map((f) => readFileSync(f, 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+  const defined = new Set([...css.matchAll(/[{;\s](--[\w-]+)\s*:/g)].map((m) => m[1]));
+  const used = new Set([...css.matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]));
+  // An undefined variable makes its whole declaration invalid. These are left undefined, as md2pdf has
+  // always printed them: <kbd> has no border (defining it changes the PDFs; #112), and .pl-ii is never emitted.
+  const known = ['--borderColor-muted', '--fgColor-danger', '--bgColor-danger-muted'];
+  assert.deepEqual([...used].filter((v) => !defined.has(v) && !known.includes(v)), []);
+  assert.deepEqual(known.filter((v) => defined.has(v)), [], 'now defined: take it off the list');
+});
+
 test('--output writes to the given path', () => {
   const dir = workspace();
   const target = join(dir, 'custom name.pdf');
@@ -824,6 +858,28 @@ test('an input is never replaced by its own PDF (#103)', () => {
     assert.match(r.stderr, /would replace the file it is made from/);
     assert.equal(readFileSync(input, 'utf8'), before);
   }
+});
+
+test('--html never replaces an input with the page it renders (#110)', () => {
+  const dir = workspace();
+  const input = join(dir, 'note.html');
+  copyFileSync(join(dir, 'sample.md'), input);
+  symlinkSync(input, join(dir, 'link.html'));
+  const before = readFileSync(input, 'utf8');
+  const cases = [['--html', input], ['--html', '-o', join(dir, 'x.pdf'), join(dir, 'x.html')], ['--html', '-o', join(dir, 'link.pdf'), input]];
+  copyFileSync(input, join(dir, 'x.html'));
+  if (existsSync(join(dir, 'NOTE.HTML'))) cases.push(['--html', '-o', join(dir, 'NOTE.pdf'), input]);
+  for (const args of cases) {
+    const r = run(...args);
+    assert.equal(r.status, 1, args.join(' '));
+    assert.match(r.stderr, /The HTML would replace the file it is made from/);
+    assert.equal(readFileSync(args.at(-1), 'utf8'), before);
+  }
+  copyFileSync(input, join(dir, 'sample.html'));
+  const r = run('--html', join(dir, 'sample.md'), join(dir, 'sample.html'));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /sample\.md: The HTML would replace .*sample\.html, another input/);
+  assert.equal(readFileSync(join(dir, 'sample.html'), 'utf8'), before);
 });
 
 test('two inputs that would write the same PDF are reported (#103)', () => {
@@ -1756,11 +1812,13 @@ test('the demo loads every renderer dependency, at the installed version', () =>
   for (const name of libImports) assert.ok(imports[name], `import map lacks ${name}`);
 
   const urls = [...Object.values(imports), ...[...page.matchAll(/<link [^>]*href="(https:[^"]+)"/g)].map((m) => m[1])];
-  assert.equal(urls.length, 5);
+  assert.equal(urls.length, 6);
   for (const url of urls) {
     const [, name, version] = url.match(/^https:\/\/(?:esm\.sh|cdn\.jsdelivr\.net\/npm)\/(@?[^@]+)@([^/]+)/);
     const pkg = name === '@highlightjs/cdn-assets' ? 'highlight.js' : name;
-    assert.equal(version, require(`${pkg}/package.json`).version, url);
+    // Read from node_modules: not every package exports its package.json.
+    const installed = JSON.parse(readFileSync(join(ROOT, 'node_modules', pkg, 'package.json'), 'utf8')).version;
+    assert.equal(version, installed, url);
   }
 });
 
@@ -2174,6 +2232,11 @@ test('adversarial Markdown renders in about the time markdown-it takes', async (
   ]) {
     const took = elapsed(() => titleOf(`---\ntitle: ${title}\n---\n`, 'stem'));
     if (took >= 500) slow.push(`titleOf, ${name}: ${Math.round(took)} ms`);
+  }
+  // Raw HTML in the running header, before #100.
+  for (const [name, html] of [['unclosed h1s', '<h1>a'.repeat(60000)], ['unclosed tags in an h1', `<h1>${'<a'.repeat(60000)}</h1>`]]) {
+    const took = elapsed(() => headingText(html));
+    if (took >= 500) slow.push(`headingText, ${name}: ${Math.round(took)} ms`);
   }
   assert.deepEqual(slow, []);
 });

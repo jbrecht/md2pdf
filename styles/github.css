@@ -12,7 +12,7 @@
   --md2pdf-leading: 1;
   --md2pdf-space: 1;
   /* Colors: --md2pdf-background the document's background; --md2pdf-text body text; --md2pdf-muted
-     quotes, footnotes and secondary text; --md2pdf-accent links. */
+     quotes, footnotes and secondary text; --md2pdf-accent links and focus rings. */
   --md2pdf-background: #fff;
   --md2pdf-text: #1f2328;
   --md2pdf-muted: #59636e;
@@ -22,6 +22,12 @@
   --md2pdf-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --md2pdf-heading-font: var(--md2pdf-font);
   --md2pdf-code-font: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+}
+
+/* github-markdown-light.css draws focus rings in this color but leaves it to github-markdown.css to
+   define; undefined, it turns off the browser's own ring. */
+:where(.markdown-body) {
+  --borderColor-accent-emphasis: var(--md2pdf-accent);
 }
 
 /* highlight.js's GitHub theme, limited to the document. From highlight.js 11.12.0.
