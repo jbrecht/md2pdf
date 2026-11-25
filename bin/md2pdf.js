@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 import { createRequire } from 'node:module';
 
 import hljs from 'highlight.js';
-import { buildDocument, createRenderer, titleOf } from '../lib/render.js';
+import { buildDocument, createRenderer, fitFormulas, titleOf } from '../lib/render.js';
 import { rewriteUrls } from '../lib/css.js';
 
 const require = createRequire(import.meta.url);
@@ -165,7 +165,16 @@ function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
     // Chrome loads a font used only in a page header or footer too late for the PDF, so start every
     // declared font loading now; the PDF waits for those loads with the rest of the page.
     head: `<base href="${pathToFileURL(baseDir + '/').href}">
-<script>document.addEventListener('DOMContentLoaded', () => document.fonts.forEach((f) => f.load().catch(() => {})));</script>`,
+<script>document.addEventListener('DOMContentLoaded', () => document.fonts.forEach((f) => f.load().catch(() => {})));</script>${
+      // A displayed formula wider than the column shrinks to fit: on screen once its fonts load, and again
+      // as printing starts.
+      /<eqn>/.test(bodyHtml)
+        ? `
+<script>${fitFormulas}
+addEventListener('load', () => document.fonts.ready.then(() => fitFormulas()));
+addEventListener('beforeprint', () => fitFormulas());</script>`
+        : ''
+    }`,
   });
 }
 

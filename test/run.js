@@ -114,15 +114,16 @@ Text with a footnote.[^1]
 [^1]: The footnote.
 `;
 
-// Opens an HTML file in headless Chrome and returns what its script put in window.probeOut.
-function probeInChrome(htmlFile, dir) {
+// Opens an HTML file in headless Chrome and returns what its script put in window.probeOut. With
+// `afterLoad`, probeOut is a function, called once the page has loaded and its fonts with it, after the
+// page's own handlers for those.
+function probeInChrome(htmlFile, dir, { afterLoad = false } = {}) {
   const probed = htmlFile.replace(/\.html$/, '.probe.html');
-  const report = `<script>
-    const pre = document.createElement('pre');
+  const write = `const pre = document.createElement('pre');
     pre.id = 'probe-out';
-    pre.textContent = JSON.stringify(window.probeOut);
-    document.body.append(pre);
-  </script>`;
+    pre.textContent = JSON.stringify(${afterLoad ? 'window.probeOut()' : 'window.probeOut'});
+    document.body.append(pre);`;
+  const report = `<script>${afterLoad ? `addEventListener('load', () => document.fonts.ready.then(() => { ${write} }));` : write}</script>`;
   writeFileSync(probed, readFileSync(htmlFile, 'utf8').replace('</body>', `${report}</body>`));
   // The browsers bin/md2pdf.js looks for, in its order.
   const chrome = process.env.CHROME_PATH ?? [
@@ -133,7 +134,8 @@ function probeInChrome(htmlFile, dir) {
     '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
   ].find((p) => existsSync(p));
   const r = spawnSync(chrome, ['--headless', '--disable-gpu', '--no-first-run', `--user-data-dir=${join(dir, 'chrome')}`,
-    '--window-size=816,1056', '--dump-dom', `file://${probed}`], { encoding: 'utf8', timeout: 60000, maxBuffer: 64 << 20 });
+    '--window-size=816,1056', ...(afterLoad ? ['--virtual-time-budget=10000'] : []), '--dump-dom', `file://${probed}`],
+    { encoding: 'utf8', timeout: 60000, maxBuffer: 64 << 20 });
   const json = r.stdout.match(/<pre id="probe-out">([^<]*)<\/pre>/)?.[1];
   assert.ok(json, `no output from Chrome: ${r.stderr}`);
   return JSON.parse(json.replaceAll('&gt;', '>').replaceAll('&lt;', '<').replaceAll('&amp;', '&'));
@@ -280,6 +282,95 @@ test('the CLI adds the math stylesheet when every formula is an error', () => {
     const html = readFileSync(join(dir, 'bad.html'), 'utf8');
     assert.doesNotMatch(html, /<span class="katex">/);
     assert.match(html, /section\.eqno > span \{ width: 3em; text-align: right; \}/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const longSum = (v, n) => Array.from({ length: n }, (_, i) => `${v}_{${i + 1}}`).join(' + ');
+// Displayed formulas: one wider than any column, one with an equation number, one in a quote, one that
+// fits and one in a table cell.
+const FIT_DOC = `# Formulas
+
+$$
+${longSum('a', 26)} = S
+$$
+
+$$
+${longSum('b', 21)} = T
+$$ (1)
+
+> $$${longSum('c', 20)} = U$$
+
+$$E = mc^2$$
+
+| a | b |
+|--|--|
+| $$x+y$$ | 2 |
+`;
+
+test('a displayed formula wider than its column shrinks to fit it, in every style (#115)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'f.md'), FIT_DOC);
+    for (const style of STYLE_NAMES) {
+      const r = run('-s', style, '--html', '-o', join(dir, `${style}.pdf`), join(dir, 'f.md'));
+      assert.equal(r.status, 0, r.stderr);
+      const probe = `<script>
+  window.probeOut = () => {
+    const article = document.querySelector('.markdown-body');
+    const [long, numbered, quoted, short, cell] = document.querySelectorAll('.katex-display');
+    // Where the formula's own text reaches, not its box, which is as wide as the column.
+    const reach = (display) => {
+      const range = document.createRange();
+      range.selectNodeContents(display.querySelector('.katex-html'));
+      return range.getBoundingClientRect();
+    };
+    const out = { overflows: [] };
+    // Other columns, as a printed page has, without running the script again.
+    for (let width = 300; width <= 760; width += 10) {
+      article.style.width = width + 'px';
+      for (const [name, display] of Object.entries({ long, numbered, quoted, short })) {
+        // The section, which is as wide as the column; a numbered formula's own box grows with it.
+        const box = display.closest('section').getBoundingClientRect();
+        const text = reach(display);
+        if (text.left < box.left - 0.5 || text.right > box.right + 0.5) {
+          out.overflows.push(\`\${width}px \${name}: text \${text.left.toFixed(1)}–\${text.right.toFixed(1)}, column \${box.left.toFixed(1)}–\${box.right.toFixed(1)}\`);
+        }
+      }
+    }
+    article.style.width = '';
+    // A formula that fits keeps the size the style gives it.
+    const size = (display) => getComputedStyle(display.firstElementChild).fontSize;
+    out.shortSize = size(short);
+    short.firstElementChild.style.fontSize = '';
+    out.styleSize = size(short);
+    // A formula in a table cell is left as it was, so its column doesn't collapse.
+    out.cellContainer = cell.style.containerType;
+    return out;
+  };
+</script></body>`;
+      writeFileSync(join(dir, `${style}.html`), readFileSync(join(dir, `${style}.html`), 'utf8').replace('</body>', probe));
+      const { overflows, shortSize, styleSize, cellContainer } = probeInChrome(join(dir, `${style}.html`), dir, { afterLoad: true });
+      assert.deepEqual(overflows, [], `${style}: ${overflows.length} overflow, such as ${JSON.stringify(overflows.slice(0, 3))}`);
+      assert.equal(shortSize, styleSize, `${style}: a formula that fits keeps its size`);
+      assert.equal(cellContainer, '', style);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the CLI adds the formula-fitting script only to a document with a displayed formula (#115)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    for (const [name, markdown, fits] of [['shown', 'Text.\n\n$$x$$\n', true], ['inline', 'Text with $x$ in it.\n', false], ['none', '# Prices\n\nIt costs $5.\n', false]]) {
+      writeFileSync(join(dir, `${name}.md`), markdown);
+      const r = run('--html', join(dir, `${name}.md`));
+      assert.equal(r.status, 0, r.stderr);
+      const html = readFileSync(join(dir, `${name}.html`), 'utf8');
+      (fits ? assert.match : assert.doesNotMatch)(html, /function fitFormulas/, name);
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -10,7 +10,7 @@ Supports GitHub-flavored Markdown: tables, task lists, footnotes, emoji shortcod
 
 # Command-line tool (macOS)
 
-Markdown is rendered to HTML with [markdown-it](https://github.com/markdown-it/markdown-it) and printed to PDF by headless Chrome. Formulas (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`, and environments such as `\begin{aligned}…\end{aligned}` or `\begin{align*}…\end{align*}` that start a block) are drawn with [KaTeX](https://katex.org), as on md2pdf.me; the HTML that `--html` writes also carries MathML for screen readers, which the PDF doesn't. Prices such as $5 and $10 stay text, even beside a formula.
+Markdown is rendered to HTML with [markdown-it](https://github.com/markdown-it/markdown-it) and printed to PDF by headless Chrome. Formulas (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`, and environments such as `\begin{aligned}…\end{aligned}` or `\begin{align*}…\end{align*}` that start a block) are drawn with [KaTeX](https://katex.org), as on md2pdf.me; the HTML that `--html` writes also carries MathML for screen readers, which the PDF doesn't. Prices such as $5 and $10 stay text, even beside a formula. A displayed formula wider than the page shrinks until it fits, however long it is, so a very long one prints small; split it over lines with `aligned` to keep it full size.
 
 ## Install
 
@@ -128,9 +128,11 @@ const html = buildDocument({
 
 A style that [bundles fonts](#adding-a-style) loads them relative to its stylesheet, so a page that inlines the CSS must rewrite those `url()`s, as the CLI does, or let a bundler do it (in Vite, `?inline`, not `?raw`). Before printing, start every font loading and wait: a font used only in a page header may otherwise not be requested until printing starts, and the PDF falls back, as it does in headless Chrome. `await Promise.allSettled([...document.fonts].map((f) => f.load()))`.
 
+KaTeX draws a displayed formula on one line that never wraps, so a long one runs past the page. Once the document is in the page and its fonts have loaded, call `fitFormulas(element)` on the element that holds it, or on `document`: each displayed formula wider than its column then shrinks to fit, on screen and when printed, and the rest keep their size. Run it again whenever the document is rendered again. The CLI does this itself.
+
 | Export | What it is |
 | ------ | ---------- |
-| `@threepenny/md2pdf/render` | `createRenderer({ hljs, math?, html?, idPrefix?, highlightBudget? })`, `buildDocument(...)`, `titleOf(markdown, fallback)` (the first `#` heading's text as it renders, without Markdown syntax, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)` |
+| `@threepenny/md2pdf/render` | `createRenderer({ hljs, math?, html?, idPrefix?, highlightBudget? })`, `buildDocument(...)`, `titleOf(markdown, fallback)` (the first `#` heading's text as it renders, without Markdown syntax, else the front matter's `title:`, else the fallback), `escapeHtml(s)`, `cssString(s)`, `headingText(html)`, `fitFormulas(root)` (in the browser: shrinks displayed formulas wider than their column to fit it) |
 | `@threepenny/md2pdf/styles` | `pageMargins`: each style's `@page` margin at default spacing, e.g. `pageMargins.classic` is `'1in 1.1in 0.9in'` |
 | `@threepenny/md2pdf/styles/<name>.css` | Each style's on-screen look, scoped to `.markdown-body`. For `github`, load `github-markdown-css/github-markdown-light.css` first |
 | `@threepenny/md2pdf/styles/print/<name>.css` | Each style's print rules: page margins, running headers and page numbers, collapsed `<details>` sections printed open, and, in Safari, no space below the document's last block. Load it after the on-screen file, only in a page that holds nothing but the document |
