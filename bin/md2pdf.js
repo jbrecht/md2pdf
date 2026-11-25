@@ -243,15 +243,25 @@ function runChrome(chrome, htmlPath, pdfPath) {
 // A file's identity, whatever name reaches it: names can differ by case, a symlink or a hard link.
 const fileId = (stat) => `${stat.dev}:${stat.ino}`;
 
-// `written` maps each PDF this run has written, by fileId, to the input it came from.
-async function convert(input, opts, chrome, written) {
+// `written` maps each PDF this run has written, by fileId, to the input it came from;
+// `inputs` maps each of this run's inputs, by fileId, to its name.
+async function convert(input, opts, chrome, written, inputs) {
   const inputPath = resolve(input);
   if (!existsSync(inputPath)) throw new Error(`No such file: ${input}`);
+  const source = fileId(statSync(inputPath));
   const stem = basename(inputPath, extname(inputPath));
   const pdfPath = resolve(opts.output ?? join(dirname(inputPath), `${stem}.pdf`));
   const target = statSync(pdfPath, { throwIfNoEntry: false });
-  if (target && fileId(target) === fileId(statSync(inputPath))) {
+  if (target && fileId(target) === source) {
     throw new Error('The PDF would replace the file it is made from; give another path with --output');
+  }
+  const htmlPath = opts.html && pdfPath.replace(/\.pdf$/i, '') + '.html';
+  const htmlTarget = htmlPath && statSync(htmlPath, { throwIfNoEntry: false });
+  if (htmlTarget && fileId(htmlTarget) === source) {
+    throw new Error('The HTML would replace the file it is made from; give another path with --output');
+  }
+  if (htmlTarget && inputs.has(fileId(htmlTarget))) {
+    throw new Error(`The HTML would replace ${inputs.get(fileId(htmlTarget))}, another input; convert it alone with --output`);
   }
   if (target && written.has(fileId(target))) {
     throw new Error(`${pdfPath} was already written from ${written.get(fileId(target))}; convert it alone with --output`);
@@ -271,12 +281,12 @@ async function convert(input, opts, chrome, written) {
 
   const workDir = makeTempDir('md2pdf-');
   try {
-    const htmlPath = join(workDir, `${stem}.html`);
-    writeFileSync(htmlPath, html);
-    if (opts.html) writeFileSync(pdfPath.replace(/\.pdf$/i, '') + '.html', html);
+    const page = join(workDir, `${stem}.html`);
+    writeFileSync(page, html);
+    if (htmlPath) writeFileSync(htmlPath, html);
     // Chrome prints into the temp folder: printing over a PDF it can't replace, it reports success.
     const printed = join(workDir, 'print.pdf');
-    await runChrome(chrome, htmlPath, printed);
+    await runChrome(chrome, page, printed);
     try {
       writeFileSync(pdfPath, readFileSync(printed));
     } catch (err) {
@@ -346,9 +356,14 @@ async function main() {
   if (!katex) console.error(`md2pdf: KaTeX isn't installed, so formulas print as their source; run ${join(ROOT, 'install.sh')} again`);
   let failed = 0;
   const written = new Map();
+  const inputs = new Map();
+  for (const file of files) {
+    const stat = statSync(resolve(file), { throwIfNoEntry: false });
+    if (stat) inputs.set(fileId(stat), file);
+  }
   for (const file of files) {
     try {
-      const pdf = await convert(file, opts, chrome, written);
+      const pdf = await convert(file, opts, chrome, written, inputs);
       console.log(pdf);
       if (opts.open) spawn('open', [pdf], { stdio: 'ignore', detached: true }).unref();
     } catch (err) {
