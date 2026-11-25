@@ -288,8 +288,8 @@ test('the CLI adds the math stylesheet when every formula is an error', () => {
 });
 
 const longSum = (v, n) => Array.from({ length: n }, (_, i) => `${v}_{${i + 1}}`).join(' + ');
-// Displayed formulas: one wider than any column, one with an equation number, one in a quote, one that
-// fits, one in a table cell and one numbered with \tag.
+// Displayed formulas wider than any column: alone, with md2pdf's number, with KaTeX's \tag, in a quote, a
+// list, a callout and a collapsed section. Then one that fits and one in a table cell.
 const FIT_DOC = `# Formulas
 
 $$
@@ -300,17 +300,34 @@ $$
 ${longSum('b', 21)} = T
 $$ (1)
 
+$$
+${longSum('d', 22)} = V \\tag{42}
+$$
+
 > $$${longSum('c', 20)} = U$$
+
+- An item:
+
+  $$
+  ${longSum('e', 22)} = W
+  $$
+
+> [!NOTE]
+> $$${longSum('f', 22)} = X$$
+
+<details><summary>Proof</summary>
+
+$$
+${longSum('g', 22)} = Y
+$$
+
+</details>
 
 $$E = mc^2$$
 
 | a | b |
 |--|--|
 | $$x+y$$ | 2 |
-
-$$
-${longSum('d', 22)} = V \\tag{42}
-$$
 `;
 
 test('a displayed formula wider than its column shrinks to fit it, in every style (#115)', () => {
@@ -323,45 +340,65 @@ test('a displayed formula wider than its column shrinks to fit it, in every styl
       const probe = `<script>
   window.probeOut = () => {
     const article = document.querySelector('.markdown-body');
-    const [long, numbered, quoted, short, cell, tagged] = document.querySelectorAll('.katex-display');
-    // Where the formula's own text reaches, not its box, which is as wide as the column.
+    const displays = [...document.querySelectorAll('.katex-display')];
+    const names = ['long', 'numbered', 'tagged', 'quoted', 'listed', 'callout', 'collapsed', 'short', 'cell'];
+    const formula = Object.fromEntries(names.map((name, i) => [name, displays[i]]));
+    // Where a formula's own text reaches, without a \\tag: not its box, which is as wide as the column.
     const reach = (display) => {
       const range = document.createRange();
-      range.selectNodeContents(display.querySelector('.katex-html'));
+      const bases = display.querySelectorAll('.katex-html > .katex-base');
+      range.setStartBefore(bases[0]);
+      range.setEndAfter(bases[bases.length - 1]);
       return range.getBoundingClientRect();
     };
-    const out = { overflows: [] };
+    const out = { problems: [] };
+    const fix = (n) => n.toFixed(1);
     // Other columns, as a printed page has, without running the script again.
-    for (let width = 300; width <= 760; width += 10) {
+    for (let width = 150; width <= 760; width += 10) {
       article.style.width = width + 'px';
-      for (const [name, display] of Object.entries({ long, numbered, quoted, short, tagged })) {
+      for (const name of names.slice(0, -1)) {
+        const display = formula[name];
         // The section, which is as wide as the column; a numbered formula's own box grows with it.
         const box = display.closest('section').getBoundingClientRect();
         const text = reach(display);
         if (text.left < box.left - 0.5 || text.right > box.right + 0.5) {
-          out.overflows.push(\`\${width}px \${name}: text \${text.left.toFixed(1)}–\${text.right.toFixed(1)}, column \${box.left.toFixed(1)}–\${box.right.toFixed(1)}\`);
+          out.problems.push(\`\${width}px \${name}: text \${fix(text.left)}–\${fix(text.right)}, column \${fix(box.left)}–\${fix(box.right)}\`);
         }
       }
-      // The \\tag number clears the formula.
-      const bases = tagged.querySelectorAll('.katex-html > .katex-base');
-      const tag = tagged.querySelector('.katex-tag').getBoundingClientRect();
-      const end = bases[bases.length - 1].getBoundingClientRect().right;
-      if (end > tag.left + 0.5) out.overflows.push(\`\${width}px tagged: formula ends at \${end.toFixed(1)}, its number starts at \${tag.left.toFixed(1)}\`);
+      // Each number clears its formula.
+      for (const [name, number] of [['numbered', 'section.eqno > span'], ['tagged', '.katex-tag']]) {
+        const end = reach(formula[name]).right;
+        const start = formula[name].closest('section').querySelector(number).getBoundingClientRect().left;
+        if (end > start + 0.5) out.problems.push(\`\${width}px \${name}: formula ends at \${fix(end)}, its number starts at \${fix(start)}\`);
+      }
     }
     article.style.width = '';
+    // Running the script again, even while a formula is shrunk, changes nothing.
+    const sizes = () => displays.map((display) => display.firstElementChild.style.fontSize);
+    const before = sizes();
+    if (typeof fitFormulas === 'function') {
+      article.style.width = '300px';
+      fitFormulas();
+      article.style.width = '';
+      fitFormulas();
+    }
+    out.rerun = sizes().every((size, i) => size === before[i]) ? 'same' : JSON.stringify([before, sizes()]);
     // A formula that fits keeps the size the style gives it.
     const size = (display) => getComputedStyle(display.firstElementChild).fontSize;
-    out.shortSize = size(short);
-    short.firstElementChild.style.fontSize = '';
-    out.styleSize = size(short);
+    out.shortSize = size(formula.short);
+    formula.short.firstElementChild.style.fontSize = '';
+    out.styleSize = size(formula.short);
     // A formula in a table cell is left as it was, so its column doesn't collapse.
-    out.cellContainer = cell.style.containerType;
+    out.cellContainer = formula.cell.style.containerType;
+    out.count = displays.length;
     return out;
   };
 </script></body>`;
       writeFileSync(join(dir, `${style}.html`), readFileSync(join(dir, `${style}.html`), 'utf8').replace('</body>', probe));
-      const { overflows, shortSize, styleSize, cellContainer } = probeInChrome(join(dir, `${style}.html`), dir, { afterLoad: true });
-      assert.deepEqual(overflows, [], `${style}: ${overflows.length} overflow, such as ${JSON.stringify(overflows.slice(0, 3))}`);
+      const { problems, rerun, shortSize, styleSize, cellContainer, count } = probeInChrome(join(dir, `${style}.html`), dir, { afterLoad: true });
+      assert.equal(count, 9, `${style}: formulas found`);
+      assert.deepEqual(problems, [], `${style}: ${problems.length} problems, such as ${JSON.stringify(problems.slice(0, 3))}`);
+      assert.equal(rerun, 'same', style);
       assert.equal(shortSize, styleSize, `${style}: a formula that fits keeps its size`);
       assert.equal(cellContainer, '', style);
     }
