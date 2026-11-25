@@ -1119,6 +1119,55 @@ test('every style trims the space below the last block of a printed document', (
   for (const style of STYLE_NAMES) assert.match(readFileSync(join(ROOT, 'styles', 'print', `${style}.css`), 'utf8'), rule, style);
 });
 
+// A closed section with a paragraph in it, then one whose body is bare text, then a paragraph.
+const DETAILS_DOC = `<details><summary>Show the proof</summary>
+
+The hidden paragraph.
+
+</details>
+
+<details><summary>Answer</summary>
+Forty-two
+</details>
+
+The paragraph after.
+`;
+
+test('every style prints a collapsed section open, its summary kept with its body (#102)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const body = createRenderer({ hljs }).render(DETAILS_DOC);
+    for (const style of STYLE_NAMES) {
+      const print = join(ROOT, 'styles', 'print', `${style}.css`);
+      const css = screenCss(style) + '\n' + rewriteUrls(readFileSync(print, 'utf8'), (ref) => new URL(ref, pathToFileURL(print)).href);
+      writeFileSync(join(dir, 'd.html'), `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head>
+<body><article class="markdown-body">${body}</article>
+<script>
+  const [proof, answer] = document.querySelectorAll('details');
+  const bare = document.createRange();
+  bare.selectNodeContents(answer.lastChild);
+  const summary = getComputedStyle(proof.querySelector('summary'));
+  window.probeOut = {
+    // Chrome lays out a closed section's content when asked for its size, so ask whether it is visible
+    // and whether the section is taller than its summary.
+    shown: proof.querySelector('p').checkVisibility() &&
+      [proof, answer].every((d) => d.getBoundingClientRect().height > d.querySelector('summary').getBoundingClientRect().height + 5),
+    marker: summary.listStyleType,
+    breakAfter: summary.breakAfter,
+    gap: document.querySelector('details + p').getBoundingClientRect().top - bare.getBoundingClientRect().bottom,
+  };
+</script></body></html>`);
+      const { shown, marker, breakAfter, gap } = probeInChrome(join(dir, 'd.html'), dir);
+      assert.ok(shown, `${style} hides a collapsed section`);
+      assert.equal(marker, 'disclosure-open', style);
+      assert.equal(breakAfter, 'avoid', style);
+      assert.ok(gap > 4, `${style}: ${gap}px between a section's bare text and the paragraph after it`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('worksheet style prints with its bundled fonts', () => {
   // One page, so it has no page number, which is set in Fredoka too.
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
@@ -1732,6 +1781,28 @@ test('no style prints a blank last page from Safari', { skip: !swiftc && 'needs 
     for (const style of STYLE_NAMES) {
       assert.equal(pageCount(join(dir, style, 'untrimmed.webkit.pdf')), 2, `${style}: without the trim, the margin doesn't reach a second page`);
       assert.equal(pageCount(join(dir, style, 'doc.webkit.pdf')), 1, `${style} prints a blank last page`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Safari prints a collapsed section open in every style (#102)', { skip: !swiftc && 'needs macOS and swiftc' }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 'doc.md'), DETAILS_DOC);
+    const pages = STYLE_NAMES.map((style) => {
+      mkdirSync(join(dir, style));
+      const r = run('-s', style, '--html', '-o', join(dir, style, 'doc.pdf'), join(dir, 'doc.md'));
+      assert.equal(r.status, 0, r.stderr);
+      return join(dir, style, 'doc.html');
+    });
+    execFileSync('swiftc', ['-O', join(ROOT, 'test', 'webkit-print.swift'), '-o', join(dir, 'webkit-print')], { stdio: 'pipe' });
+    execFileSync(join(dir, 'webkit-print'), pages, { stdio: 'pipe', timeout: 120_000 });
+    for (const style of STYLE_NAMES) {
+      const text = readFileSync(join(dir, style, 'doc.webkit.txt'), 'utf8');
+      assert.match(text, /The hidden paragraph\./, style);
+      assert.match(text, /Forty-two/, style);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });

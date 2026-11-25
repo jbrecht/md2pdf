@@ -19,6 +19,17 @@ body {
   background: #fff;
 }
 
+/* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows. */
+.markdown-body details::details-content {
+  content-visibility: visible;
+}
+.markdown-body details:not([open]) > summary {
+  list-style-type: disclosure-open;
+}
+.markdown-body details > summary {
+  break-after: avoid;
+}
+
 .markdown-body {
   max-width: none;
   margin: 0;

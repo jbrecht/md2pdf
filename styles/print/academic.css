@@ -21,6 +21,21 @@ body {
   background: #fff;
 }
 
+/* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows and
+   the space of a paragraph below it. */
+.markdown-body details {
+  margin-bottom: calc(0.6em * var(--md2pdf-space));
+}
+.markdown-body details::details-content {
+  content-visibility: visible;
+}
+.markdown-body details:not([open]) > summary {
+  list-style-type: disclosure-open;
+}
+.markdown-body details > summary {
+  break-after: avoid;
+}
+
 /* Nothing follows the document's last block, so Safari keeps no space below it: it starts a blank
    page for that space when it runs past the end of a page. Only Safari, since Chrome's margin-trim
    also drops the space above a block that a page break moves. */
