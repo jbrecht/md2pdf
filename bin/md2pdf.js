@@ -167,13 +167,12 @@ function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
     // declared font loading now; the PDF waits for those loads with the rest of the page.
     head: `<base href="${pathToFileURL(baseDir + '/').href}">
 <script>document.addEventListener('DOMContentLoaded', () => document.fonts.forEach((f) => f.load().catch(() => {})));</script>${
-      // A displayed formula wider than the column shrinks to fit: on screen once its fonts load, and again
-      // as printing starts.
+      // A displayed formula wider than the column shrinks to fit, once its fonts have loaded. It fits
+      // whatever column it ends up in, so the printed page needs no second run.
       /<eqn>/.test(bodyHtml)
         ? `
 <script>${fitFormulas}
-addEventListener('load', () => document.fonts.ready.then(() => fitFormulas()));
-addEventListener('beforeprint', () => fitFormulas());</script>`
+addEventListener('load', () => document.fonts.ready.then(() => fitFormulas()));</script>`
         : ''
     }`,
   });
