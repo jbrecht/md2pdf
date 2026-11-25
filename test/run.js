@@ -1210,7 +1210,8 @@ test('every style trims the space below the last block of a printed document', (
   for (const style of STYLE_NAMES) assert.match(readFileSync(join(ROOT, 'styles', 'print', `${style}.css`), 'utf8'), rule, style);
 });
 
-// A closed section with a paragraph in it, then one whose body is bare text, then a paragraph.
+// A closed section with a paragraph in it, one whose body is bare text, a paragraph, and a quote that
+// ends with a section.
 const DETAILS_DOC = `<details><summary>Show the proof</summary>
 
 The hidden paragraph.
@@ -1222,6 +1223,14 @@ Forty-two
 </details>
 
 The paragraph after.
+
+> A quote that ends with a section:
+>
+> <details><summary>Hint</summary>
+>
+> The hint.
+>
+> </details>
 `;
 
 test('every style prints a collapsed section open, its summary kept with its body (#102)', () => {
@@ -1246,13 +1255,16 @@ test('every style prints a collapsed section open, its summary kept with its bod
     marker: summary.listStyleType,
     breakAfter: summary.breakAfter,
     gap: document.querySelector('details + p').getBoundingClientRect().top - bare.getBoundingClientRect().bottom,
+    // The space below a section is between it and the next block, not inside a quote's box.
+    lastMargin: getComputedStyle(document.querySelector('blockquote details')).marginBottom,
   };
 </script></body></html>`);
-      const { shown, marker, breakAfter, gap } = probeInChrome(join(dir, 'd.html'), dir);
+      const { shown, marker, breakAfter, gap, lastMargin } = probeInChrome(join(dir, 'd.html'), dir);
       assert.ok(shown, `${style} hides a collapsed section`);
       assert.equal(marker, 'disclosure-open', style);
       assert.equal(breakAfter, 'avoid', style);
       assert.ok(gap > 4, `${style}: ${gap}px between a section's bare text and the paragraph after it`);
+      assert.equal(lastMargin, '0px', `${style}: space below a section at the end of a quote`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });

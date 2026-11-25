@@ -92,8 +92,8 @@ body {
 }
 
 /* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows and
-   the space of a paragraph below it. */
-.markdown-body details {
+   the space of a paragraph between it and the next block. */
+.markdown-body details:not(:last-child) {
   margin-bottom: calc(0.8em * var(--md2pdf-space));
 }
 .markdown-body details::details-content {
