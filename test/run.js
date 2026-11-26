@@ -3303,3 +3303,222 @@ test('install.sh points the Quick Action at convert.sh from a folder with & in i
   assert.equal(installedCommand('/Users/x/a\\b|c & d'), 'exec "/Users/x/a\\b|c &amp; d/quick-action/convert.sh" "$@"');
 });
 
+
+// A home folder for uninstall.sh, in the suite's temp folder and with a space in its name, holding what
+// install.sh installs.
+function uninstallHome() {
+  const home = mkdtempSync(join(tmpdir(), 'md2pdf home '));
+  mkdirSync(join(home, '.local', 'bin'), { recursive: true });
+  writeFileSync(join(home, '.local', 'bin', 'md2pdf'), '');
+  mkdirSync(join(home, 'Library', 'Services', 'Convert to PDF.workflow', 'Contents'), { recursive: true });
+  return home;
+}
+const saveStyle = (dir, name = 'config.json') => {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, name), '{"style":"classic"}\n');
+  return join(dir, name);
+};
+const PBS_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>NSServicesStatus</key><dict>
+<key>(null) - Convert to PDF - runWorkflowAsService</key><dict><key>key_equivalent</key><string>@~^p</string></dict>
+<key>(null) - Other Service - runWorkflowAsService</key><dict/>
+</dict></dict></plist>
+`;
+
+// Runs uninstall.sh with HOME set to `home`. The environment is built from scratch, never from process.env:
+// an XDG_CONFIG_HOME or ZDOTDIR from the shell running the tests would point the script at the real config.
+// The real `defaults` edits the real Services prefs whatever HOME says, so a stand-in comes first on PATH,
+// and pbs, which the script runs by its absolute path, is swapped for a stand-in in a copy of the script.
+function uninstall(home, env = {}, cwd = home, { exportFails = false } = {}) {
+  for (const path of [home, cwd, ...Object.values(env)]) {
+    if (path) assert.ok((path.startsWith('/') ? join(path) : join(cwd, path)).startsWith(`${SUITE_TMP}/`), path);
+  }
+  const stubs = mkdtempSync(join(tmpdir(), 'md2pdf-stubs-'));
+  writeFileSync(join(stubs, 'pbs.plist'), PBS_PLIST);
+  const stub = (name, body) => writeFileSync(join(stubs, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+  stub('defaults', `printf '%s\\n' "$*" >> '${stubs}/defaults.log'
+case "$1 $2" in
+  'export pbs') ${exportFails ? 'exit 1' : `cp '${stubs}/pbs.plist' "$3"`} ;;
+  'import pbs') cp "$3" '${stubs}/imported.plist' ;;
+  *) exit 1 ;;
+esac`);
+  stub('pbs', `printf '%s\\n' "$*" >> '${stubs}/pbs.log'`);
+  const source = readFileSync(join(ROOT, 'uninstall.sh'), 'utf8');
+  const script = source.replaceAll('/System/Library/CoreServices/pbs', join(stubs, 'pbs'));
+  assert.notEqual(script, source);
+  // A backstop: no path from the root in the script but these. It can't catch every way out of HOME.
+  const allowed = [join(stubs, 'pbs'), '2>/dev/null', '${TMPDIR:-/tmp}/', '!= /*', '== /*', '== / ]]'];
+  const rest = allowed.reduce((text, path) => text.replaceAll(path, ''), script.split('\n').slice(1).join('\n'));
+  assert.doesNotMatch(rest, /(^|[^\w.$~])\//m);
+  writeFileSync(join(stubs, 'uninstall.sh'), script);
+  const childEnv = { HOME: home, PATH: `${stubs}:/usr/bin:/bin`, TMPDIR: SUITE_TMP, ...env };
+  const which = spawnSync('/bin/zsh', ['-f', '-c', 'whence -p defaults'], { encoding: 'utf8', env: childEnv, cwd });
+  assert.equal(which.stdout, `${join(stubs, 'defaults')}\n`);
+  const r = spawnSync('/bin/zsh', ['-f', join(stubs, 'uninstall.sh')], { encoding: 'utf8', env: childEnv, cwd });
+  const log = (name) => (existsSync(join(stubs, name)) ? readFileSync(join(stubs, name), 'utf8') : '');
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr, defaults: log('defaults.log'), pbs: log('pbs.log'), imported: log('imported.plist') };
+}
+const zsh = { skip: !existsSync('/bin/zsh') && 'needs zsh' };
+
+test('uninstall.sh removes the launcher, the Quick Action, its shortcut and the saved style (#104)', zsh, () => {
+  const home = uninstallHome();
+  const config = saveStyle(join(home, '.config', 'md2pdf'));
+  const r = uninstall(home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!existsSync(join(home, '.local', 'bin', 'md2pdf')));
+  assert.ok(!existsSync(join(home, 'Library', 'Services', 'Convert to PDF.workflow')));
+  assert.ok(!existsSync(join(home, '.config', 'md2pdf')));
+  assert.ok(existsSync(join(home, '.config')));
+  assert.equal(r.stdout, `Removed ${config}\nmd2pdf uninstalled.\n`);
+  assert.match(r.defaults, /^export pbs (.+)\nimport pbs \1\n$/);
+  assert.ok(r.defaults.startsWith(`export pbs ${SUITE_TMP}/`), r.defaults);
+  assert.doesNotMatch(r.imported, /Convert to PDF/);
+  assert.match(r.imported, /Other Service/);
+  assert.equal(r.pbs, '-update\n');
+  assert.deepEqual(readdirSync(SUITE_TMP).filter((name) => name.startsWith('md2pdf-pbs')), []);
+
+  const again = uninstall(home);
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(again.stdout, 'md2pdf uninstalled.\n');
+});
+
+test('uninstall.sh removes only config.json, never anything else in its folder (#104)', zsh, () => {
+  let home = uninstallHome();
+  let dir = join(home, '.config', 'md2pdf');
+  const config = saveStyle(dir);
+  writeFileSync(join(dir, 'notes.txt'), 'mine');
+  let r = uninstall(home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!existsSync(config));
+  assert.equal(readFileSync(join(dir, 'notes.txt'), 'utf8'), 'mine');
+
+  // A config.json that isn't a file is kept, with what's in it.
+  home = uninstallHome();
+  dir = join(home, '.config', 'md2pdf', 'config.json');
+  saveStyle(dir, 'inside.json');
+  r = uninstall(home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(existsSync(join(dir, 'inside.json')));
+  assert.equal(r.stdout, `Kept ${dir}: not a file\nmd2pdf uninstalled.\n`);
+
+  // A config.json that is a link goes, and what it links to stays.
+  home = uninstallHome();
+  const target = saveStyle(join(home, 'dotfiles'), 'style.json');
+  mkdirSync(join(home, '.config', 'md2pdf'), { recursive: true });
+  symlinkSync(target, join(home, '.config', 'md2pdf', 'config.json'));
+  r = uninstall(home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!existsSync(join(home, '.config', 'md2pdf')));
+  assert.equal(readFileSync(target, 'utf8'), '{"style":"classic"}\n');
+
+  // Through a linked md2pdf folder, only config.json goes; the link stays.
+  home = uninstallHome();
+  const linked = mkdtempSync(join(tmpdir(), 'md2pdf-linked-'));
+  saveStyle(linked);
+  mkdirSync(join(home, '.config'));
+  symlinkSync(linked, join(home, '.config', 'md2pdf'));
+  r = uninstall(home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(readdirSync(linked), []);
+  assert.deepEqual(readdirSync(join(home, '.config')), ['md2pdf']);
+
+  // Through a linked ~/.config, as a dotfiles manager makes, only config.json goes.
+  home = uninstallHome();
+  const dotfiles = mkdtempSync(join(tmpdir(), 'md2pdf-dotfiles-'));
+  saveStyle(join(dotfiles, 'md2pdf'));
+  writeFileSync(join(dotfiles, 'other.conf'), 'mine');
+  symlinkSync(dotfiles, join(home, '.config'));
+  r = uninstall(home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(readdirSync(dotfiles), ['other.conf']);
+});
+
+test('uninstall.sh removes the saved style from XDG_CONFIG_HOME and ~/.config (#104)', zsh, () => {
+  let home = uninstallHome();
+  const xdg = mkdtempSync(join(tmpdir(), 'md2pdf xdg '));
+  const xdgConfig = saveStyle(join(xdg, 'md2pdf'));
+  let config = saveStyle(join(home, '.config', 'md2pdf'));
+  let r = uninstall(home, { XDG_CONFIG_HOME: xdg });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(readdirSync(xdg), []);
+  assert.ok(!existsSync(config));
+  assert.equal(r.stdout, `Removed ${xdgConfig}\nRemoved ${config}\nmd2pdf uninstalled.\n`);
+
+  // Empty counts as unset, as in the CLI.
+  config = saveStyle(join(home, '.config', 'md2pdf'));
+  r = uninstall(home, { XDG_CONFIG_HOME: '' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, `Removed ${config}\nmd2pdf uninstalled.\n`);
+
+  // ~/.config named twice, however it's spelled, is cleaned once.
+  const kept = join(home, '.config', 'md2pdf', 'config.json');
+  mkdirSync(kept, { recursive: true });
+  r = uninstall(home, { XDG_CONFIG_HOME: `${home}/.config/` });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, `Kept ${kept}: not a file\nmd2pdf uninstalled.\n`);
+
+  // A relative XDG_CONFIG_HOME names no one folder, so it's skipped.
+  home = uninstallHome();
+  const cwd = mkdtempSync(join(tmpdir(), 'md2pdf-cwd-'));
+  const relative = saveStyle(join(cwd, 'rel', 'md2pdf'));
+  r = uninstall(home, { XDG_CONFIG_HOME: 'rel' }, cwd);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(existsSync(relative));
+  assert.match(r.stdout, /^Skipped XDG_CONFIG_HOME \(rel\): not an absolute path$/m);
+});
+
+test('uninstall.sh keeps a config file named by MD2PDF_CONFIG, unless it is the standard one (#104)', zsh, () => {
+  let home = uninstallHome();
+  const mine = saveStyle(join(home, '.config', 'md2pdf'), 'mine.json');
+  let config = saveStyle(join(home, '.config', 'md2pdf'));
+  let r = uninstall(home, { MD2PDF_CONFIG: mine });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(existsSync(mine));
+  assert.equal(r.stdout, `Removed ${config}\nKept ${mine} (set by MD2PDF_CONFIG)\nmd2pdf uninstalled.\n`);
+
+  home = uninstallHome();
+  config = saveStyle(join(home, '.config', 'md2pdf'));
+  r = uninstall(home, { MD2PDF_CONFIG: config });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, `Removed ${config}\nmd2pdf uninstalled.\n`);
+});
+
+test('uninstall.sh removes nothing when HOME is not an absolute path to a folder (#104)', zsh, () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'md2pdf-cwd-'));
+  const config = saveStyle(join(cwd, 'home', '.config', 'md2pdf'));
+  writeFileSync(join(cwd, 'file'), '');
+  for (const home of ['home', join(cwd, 'file'), join(cwd, 'gone')]) {
+    const r = uninstall(home, {}, cwd);
+    assert.ok(existsSync(config), home);
+    assert.equal(r.defaults, '', home);
+    assert.equal(r.status, 1, home);
+    assert.equal(r.stderr, `uninstall.sh: HOME (${home}) isn't a home folder; nothing removed.\n`);
+  }
+});
+
+test('uninstall.sh says so when it can\'t read the shortcut (#104)', zsh, () => {
+  const r = uninstall(uninstallHome(), {}, undefined, { exportFails: true });
+  assert.match(r.defaults, /^export pbs .+\n$/);
+  assert.equal(r.status, 1);
+  assert.equal(r.stderr, "Kept the keyboard shortcut: couldn't read the Services preferences\nmd2pdf uninstalled, except what's listed above.\n");
+});
+
+test('uninstall.sh carries on past a file it can\'t remove, then says so (#104)', zsh, () => {
+  const home = uninstallHome();
+  const dir = join(home, '.config', 'md2pdf');
+  const config = saveStyle(dir);
+  chmodSync(dir, 0o555);
+  try {
+    const r = uninstall(home);
+    assert.ok(existsSync(config));
+    assert.ok(!existsSync(join(home, 'Library', 'Services', 'Convert to PDF.workflow')));
+    assert.match(r.defaults, /^export pbs (.+)\nimport pbs \1\n$/);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /config\.json: Permission denied\n/);
+    assert.match(r.stderr, /^md2pdf uninstalled, except what's listed above\.$/m);
+    assert.equal(r.stdout, '');
+  } finally {
+    chmodSync(dir, 0o755);
+  }
+});

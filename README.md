@@ -26,7 +26,7 @@ This installs:
 - **Convert to PDF** Quick Action — right-click any `.md` file in Finder → **Quick Actions → Convert to PDF**
 - **⌃⌥⌘P** keyboard shortcut — select `.md` files in Finder and press it
 
-Re-run `install.sh` if you move this folder, remove the Node version it was installed with, or pull a version that adds a dependency (md2pdf says so when KaTeX, which draws formulas, is missing). `./uninstall.sh` removes all of it.
+Re-run `install.sh` if you move this folder, remove the Node version it was installed with, or pull a version that adds a dependency (md2pdf says so when KaTeX, which draws formulas, is missing). `./uninstall.sh` removes all of it, and your saved default style (below).
 
 To use a different shortcut, pass it when installing (`@` ⌘, `~` ⌥, `^` ⌃, `$` ⇧), or set it to empty to skip:
 
@@ -77,7 +77,7 @@ Switch the default style — used by the Finder Quick Action, the keyboard short
 ./set-style.sh classic    # make classic the default
 ```
 
-The choice is saved in `~/.config/md2pdf/config.json`. Use `md2pdf -s <style>` to override it for one conversion.
+The choice is saved in `~/.config/md2pdf/config.json`. Use `md2pdf -s <style>` to override it for one conversion. If you set `XDG_CONFIG_HOME` in your shell, the `md2pdf` command and `set-style.sh` use `$XDG_CONFIG_HOME/md2pdf/config.json` instead, but the Quick Action and the shortcut still read `~/.config`, since Finder doesn't load your shell profile; `MD2PDF_CONFIG` names a config file of your own. `./uninstall.sh` deletes `config.json` from both of those `md2pdf` folders, and nothing else in them, and keeps a file elsewhere that `MD2PDF_CONFIG` names.
 
 ### Adding a style
 
