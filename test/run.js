@@ -1680,7 +1680,8 @@ Between the lists.
 `;
 
 // Defines detailsSpacing(), which measures DETAILS_DOC's sections against the same thing without a section:
-// the space inside each box below its last line, and the space before each paragraph after a section.
+// the space inside each box below its last line, and the space before each paragraph after a section or the
+// next item after a nested list.
 const DETAILS_SPACING = `
   // Where the last line of text in an element ends.
   const lastLine = (element) => {
@@ -1754,7 +1755,8 @@ ${DETAILS_SPACING}
     gap: document.querySelector('details + p').getBoundingClientRect().top - bare.getBoundingClientRect().bottom,
     paragraphSpace: parseFloat(getComputedStyle(document.querySelector('details + p')).marginBottom),
     // A box that ends with a section keeps no more space inside it than the same box without the section,
-    // and a section followed by a paragraph keeps the space the same block outside a section would.
+    // and a section followed by a paragraph, or by the next item after a nested list, keeps the space the
+    // same block outside a section would.
     spacing: detailsSpacing(),
     boxItem: (() => {
       const section = document.querySelector('.markdown-alert ol > li > details');
@@ -2588,6 +2590,7 @@ const SAFARI_TIGHTER = {
 };
 
 test('Safari prints a collapsed section open in every style (#102)', { skip: !swiftc && 'needs macOS and swiftc' }, () => {
+  assert.deepEqual(Object.keys(SAFARI_TIGHTER).filter((style) => !STYLE_NAMES.includes(style)), [], 'offsets for a style that no longer exists');
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
   try {
     writeFileSync(join(dir, 'doc.md'), DETAILS_DOC);
