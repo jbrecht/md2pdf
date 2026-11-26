@@ -20,12 +20,13 @@ body {
 }
 
 /* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows. A
-   section that ends a quote, callout, table cell or the last item of a list inside one of those or another
-   list gives up the space below it, as do sections ending it up to three deep, so none shows inside. */
-.markdown-body :is(blockquote, .markdown-alert, td, th, :not(.markdown-body) > :is(ul, ol) > li:last-child) > details:last-child,
-.markdown-body :is(blockquote, .markdown-alert, td, th, :not(.markdown-body) > :is(ul, ol) > li:last-child) > details:last-child > :last-child,
-.markdown-body :is(blockquote, .markdown-alert, td, th, :not(.markdown-body) > :is(ul, ol) > li:last-child) > details:last-child > details:last-child > :last-child,
-.markdown-body :is(blockquote, .markdown-alert, td, th, :not(.markdown-body) > :is(ul, ol) > li:last-child) > details:last-child > details:last-child > details:last-child > :last-child {
+   section that ends a quote, callout, table cell, or the last item of a list inside one of those or another
+   list, gives up the space below it, and so do the sections and last block inside it, up to three sections
+   deep, so none shows inside. */
+.markdown-body :is(blockquote, .markdown-alert, td, th, :is(blockquote, .markdown-alert, td, th, li) :is(ul, ol) > li:last-child) > details:last-child,
+.markdown-body :is(blockquote, .markdown-alert, td, th, :is(blockquote, .markdown-alert, td, th, li) :is(ul, ol) > li:last-child) > details:last-child > :last-child,
+.markdown-body :is(blockquote, .markdown-alert, td, th, :is(blockquote, .markdown-alert, td, th, li) :is(ul, ol) > li:last-child) > details:last-child > details:last-child > :last-child,
+.markdown-body :is(blockquote, .markdown-alert, td, th, :is(blockquote, .markdown-alert, td, th, li) :is(ul, ol) > li:last-child) > details:last-child > details:last-child > details:last-child > :last-child {
   margin-bottom: 0;
 }
 .markdown-body details::details-content {

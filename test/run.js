@@ -1372,8 +1372,10 @@ test('every style trims the space below the last block of a printed document', (
 // list in a callout whose last item is a section, a callout that ends with a section ending in code, and one
 // that ends three sections deep. Then sections in table cells, beside plain cells. Last, sections before a
 // paragraph, each beside the same thing outside a section: one that ends a <div>, one that ends in a code
-// block, both together, a section ending in a table that ends another section, and a list whose last item
-// ends with a section ending in code.
+// block, both together, a section ending in a table that ends another section, and lists whose last item
+// ends with a section ending in code: on their own, in a <div> and in a section. Then a callout with an
+// ordered list whose items end with a section, beside the same list in plain text, and a nested list whose
+// last item ends with a section, before the next outer item, beside the same in plain text.
 const DETAILS_DOC = `<details><summary>Show the proof</summary>
 
 The hidden paragraph.
@@ -1593,6 +1595,88 @@ After the list ending in a section with code.
   \`\`\`
 
 After the list ending in code.
+
+<div>
+
+- An item.
+
+- <details><summary>Wrapped list code</summary>
+
+  \`\`\`js
+  const p = 11;
+  \`\`\`
+
+  </details>
+
+</div>
+
+After the wrapped list with a section.
+
+<div>
+
+- An item.
+
+- \`\`\`js
+  const o = 12;
+  \`\`\`
+
+</div>
+
+After the wrapped list with code.
+
+<details><summary>Steps</summary>
+
+- An item.
+
+- <details><summary>Step code</summary>
+
+  \`\`\`js
+  const n = 13;
+  \`\`\`
+
+  </details>
+
+</details>
+
+After the steps with a section.
+
+<details><summary>Steps</summary>
+
+- An item.
+
+- \`\`\`js
+  const m = 14;
+  \`\`\`
+
+</details>
+
+After the steps with code.
+
+> [!NOTE]
+> 1. <details><summary>First</summary>
+>    The first reason.
+>    </details>
+> 2. <details><summary>Last</summary>
+>    The last reason.
+>    </details>
+
+> [!NOTE]
+> 1. The first item.
+> 2. The last item.
+
+- Outer one.
+  - Inner.
+  - <details><summary>Deep</summary>
+    The deep reason.
+    </details>
+- After the nested section.
+
+Between the lists.
+
+- Outer two.
+  - Inner.
+  - The deep text.
+- After the nested text.
 `;
 
 // Defines detailsSpacing(), which measures DETAILS_DOC's sections against the same thing without a section:
@@ -1607,6 +1691,7 @@ const DETAILS_SPACING = `
     text.selectNodeContents(last);
     return text.getBoundingClientRect().bottom;
   };
+  // Each pair is an id, what it measures, and the space with a section and without.
   const detailsSpacing = () => {
     const below = (box) => {
       const style = getComputedStyle(box);
@@ -1616,20 +1701,29 @@ const DETAILS_SPACING = `
       const p = [...document.querySelectorAll('.markdown-body > p')].find((p) => p.textContent === text);
       return p.getBoundingClientRect().top - lastLine(p.previousElementSibling);
     };
+    const beforeItem = (text) => {
+      const li = [...document.querySelectorAll('.markdown-body > ul > li')].find((li) => li.textContent.trim() === text);
+      return li.getBoundingClientRect().top - lastLine(li.previousElementSibling);
+    };
     const boxes = [...document.querySelectorAll('.markdown-body > :is(blockquote, .markdown-alert)')];
-    const names = ['quote', 'callout', 'nested', 'list', 'callout with code', 'three deep'];
+    const names = [['quoteBox', 'a quote'], ['calloutBox', 'a callout'], ['nestedBox', 'a quote ending in nested sections'],
+      ['listBox', 'a callout ending in a list'], ['codeCalloutBox', 'a callout ending in code'],
+      ['deepCalloutBox', 'a callout ending three sections deep'], ['orderedBox', 'a callout ending in an ordered list']];
     const [cells, plain] = document.querySelectorAll('.markdown-body > table');
     return {
       count: boxes.length,
       pairs: [
-        ...names.map((name, i) => ['inside a ' + name + ' box', below(boxes[2 * i]), below(boxes[2 * i + 1])]),
-        ['inside a header cell', below(cells.querySelector('th')), below(plain.querySelector('th'))],
-        ['inside a cell', below(cells.querySelector('td')), below(plain.querySelector('td'))],
-        ['after a <div>', after('After the wrapped section.'), after('After the wrapped paragraph.')],
-        ['after a code block', after('After the section with code.'), after('After the code.')],
-        ['after a code block in a <div>', after('After the wrapped code section.'), after('After the wrapped code.')],
-        ['after a table in a section', after('After the nested table section.'), after('After the table.')],
-        ['after a list ending in code', after('After the list ending in a section with code.'), after('After the list ending in code.')],
+        ...names.map(([id, what], i) => [id, 'inside ' + what, below(boxes[2 * i]), below(boxes[2 * i + 1])]),
+        ['headerCell', 'inside a header cell', below(cells.querySelector('th')), below(plain.querySelector('th'))],
+        ['cell', 'inside a cell', below(cells.querySelector('td')), below(plain.querySelector('td'))],
+        ['afterDiv', 'after a <div>', after('After the wrapped section.'), after('After the wrapped paragraph.')],
+        ['afterCode', 'after a code block', after('After the section with code.'), after('After the code.')],
+        ['afterDivCode', 'after a code block in a <div>', after('After the wrapped code section.'), after('After the wrapped code.')],
+        ['afterSectionTable', 'after a table in a section', after('After the nested table section.'), after('After the table.')],
+        ['afterListCode', 'after a list ending in code', after('After the list ending in a section with code.'), after('After the list ending in code.')],
+        ['afterDivListCode', 'after a list in a <div> ending in code', after('After the wrapped list with a section.'), after('After the wrapped list with code.')],
+        ['afterSectionListCode', 'after a list in a section ending in code', after('After the steps with a section.'), after('After the steps with code.')],
+        ['nestedItem', 'before the item after a nested list', beforeItem('After the nested section.'), beforeItem('After the nested text.')],
       ],
     };
   };`;
@@ -1662,6 +1756,11 @@ ${DETAILS_SPACING}
     // A box that ends with a section keeps no more space inside it than the same box without the section,
     // and a section followed by a paragraph keeps the space the same block outside a section would.
     spacing: detailsSpacing(),
+    boxItem: (() => {
+      const section = document.querySelector('.markdown-alert ol > li > details');
+      const li = section.parentElement;
+      return { gap: li.nextElementSibling.getBoundingClientRect().top - lastLine(li), margin: parseFloat(getComputedStyle(section).marginBottom) };
+    })(),
     itemGap: (() => {
       const reason = document.createRange();
       reason.selectNodeContents(document.querySelector('li details').lastChild);
@@ -1676,16 +1775,18 @@ ${DETAILS_SPACING}
     })(),
   };
 </script></body></html>`);
-      const { shown, marker, breakAfter, gap, paragraphSpace, spacing, itemGap, spaceScale } = probeInChrome(join(dir, 'd.html'), dir);
+      const { shown, marker, breakAfter, gap, paragraphSpace, spacing, boxItem, itemGap, spaceScale } = probeInChrome(join(dir, 'd.html'), dir);
       assert.ok(shown, `${style} hides a collapsed section`);
       assert.equal(marker, 'disclosure-open', style);
       assert.equal(breakAfter, 'avoid', style);
       // A paragraph's space, plus the little of its last line that lies below the text.
       assert.ok(gap >= paragraphSpace && gap <= paragraphSpace + 4, `${style}: ${gap}px between a section's bare text and the paragraph after it, where paragraphs have ${paragraphSpace}px`);
-      assert.equal(spacing.count, 12, `${style}: boxes found`);
-      for (const [where, withSection, without] of spacing.pairs) {
+      assert.equal(spacing.count, 14, `${style}: boxes found`);
+      for (const [, where, withSection, without] of spacing.pairs) {
         assert.ok(Math.abs(withSection - without) <= 1, `${style}: ${withSection}px ${where} with a section, ${without}px without`);
       }
+      // A section that ends an item before another, in a list in a box, keeps its space.
+      assert.ok(boxItem.margin > 0 && boxItem.gap >= boxItem.margin, `${style}: ${boxItem.gap}px after a section ending a callout list's first item, whose margin is ${boxItem.margin}px`);
       assert.ok(itemGap >= paragraphSpace && itemGap <= paragraphSpace + 4, `${style}: ${itemGap}px between a section's bare text and the next list item, where paragraphs have ${paragraphSpace}px`);
       assert.ok(Math.abs(spaceScale - 3) < 0.01, `${style}: the space after a section scales ${spaceScale}× with --md2pdf-space 3`);
     }
@@ -2431,16 +2532,17 @@ test('no style prints a blank last page from Safari', { skip: !swiftc && 'needs 
   // trims it.
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
   try {
-    // The last paragraph on its own, and at the end of a collapsed section, whose margin reaches the page's
-    // end through the section's.
+    // The last paragraph on its own, at the end of a collapsed section, and at the end of a section in a list's
+    // last item, whose margins reach the page's end through the section's and the list's.
     const docs = {
-      paragraph: ['', '.markdown-body > p:last-child'],
-      section: ['<details><summary>Last</summary>\n\n', '.markdown-body > details:last-child > p:last-child'],
+      paragraph: ['The last paragraph.\n', '.markdown-body > p:last-child'],
+      section: ['<details><summary>Last</summary>\n\nThe last paragraph.\n\n</details>\n', '.markdown-body > details:last-child > p:last-child'],
+      list: ['- <details><summary>Last</summary>\n\n  The last paragraph.\n\n  </details>\n', '.markdown-body > ul > li:last-child > details:last-child > p:last-child'],
     };
-    const pages = STYLE_NAMES.flatMap((style) => Object.entries(docs).flatMap(([name, [before, last]]) => {
+    const pages = STYLE_NAMES.flatMap((style) => Object.entries(docs).flatMap(([name, [markdown, last]]) => {
       const sub = join(dir, style, name);
       mkdirSync(sub, { recursive: true });
-      writeFileSync(join(sub, 'doc.md'), `<div class="spacer"></div>\n\n${before}The last paragraph.\n${before && '\n</details>\n'}`);
+      writeFileSync(join(sub, 'doc.md'), `<div class="spacer"></div>\n\n${markdown}`);
       const r = run('-s', style, '--html', '-o', join(sub, 'doc.pdf'), join(sub, 'doc.md'));
       assert.equal(r.status, 0, r.stderr);
       const [top, , bottom = top] = pageMargins[style].split(' ').map(parseFloat);
@@ -2474,6 +2576,17 @@ test('no style prints a blank last page from Safari', { skip: !swiftc && 'needs 
   }
 });
 
+// How many px tighter Safari sets a list that ends with a section than the same list without one, where Chrome
+// sets them the same; allowed because it's tighter, not looser (see #102). Every other pair matches.
+const SAFARI_TIGHTER = {
+  classic: { afterListCode: 1, afterDivListCode: 1, afterSectionListCode: 1 },
+  academic: { afterListCode: 1, afterDivListCode: 1, afterSectionListCode: 1 },
+  modern: { afterListCode: 1, afterDivListCode: 1, afterSectionListCode: 1 },
+  worksheet: { listBox: 2, afterListCode: 2, afterDivListCode: 2, afterSectionListCode: 2, nestedItem: 2 },
+  gothic: { afterListCode: 2, afterDivListCode: 2, afterSectionListCode: 2 },
+  sandwake: { afterListCode: 2, afterDivListCode: 2, afterSectionListCode: 2 },
+};
+
 test('Safari prints a collapsed section open in every style (#102)', { skip: !swiftc && 'needs macOS and swiftc' }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
   try {
@@ -2488,13 +2601,14 @@ test('Safari prints a collapsed section open in every style (#102)', { skip: !sw
       const opener = /<script>document\.addEventListener\('DOMContentLoaded', \(\) => \{\n  for \(const section of document\.querySelectorAll\('details'\)\)[^]*?<\/script>/;
       assert.match(html, opener, style);
       // The Chrome test's spacing measurements, taken in Safari's layout and printed at the top of the page,
-      // since only the PDF's text comes back: each that differs by more than a pixel.
+      // since only the PDF's text comes back: how much tighter each pair is with a section, where it differs.
       const report = `<script>${DETAILS_SPACING}
 addEventListener('load', () => {
   const { count, pairs } = detailsSpacing();
-  const off = pairs.filter(([, a, b]) => Math.abs(a - b) > 1).map(([where, a, b]) => where + '=' + a.toFixed(1) + '/' + b.toFixed(1));
+  const off = pairs.filter(([, , a, b]) => !(Math.abs(b - a) <= 0.3)).map(([id, , a, b]) => id + ':' + (b - a).toFixed(2));
   const p = document.createElement('p');
-  p.textContent = 'SPACING ' + count + ' ' + (off.join(' ; ') || 'even') + ' END';
+  p.style.hyphens = 'none';
+  p.textContent = 'SPACING ' + count + ' ' + (off.join(' ') || 'even') + ' END';
   document.querySelector('.markdown-body').prepend(p);
 });
 </script></body>`;
@@ -2509,14 +2623,16 @@ addEventListener('load', () => {
       assert.match(text, /The nested paragraph\./, style);
       assert.match(text, /Forty-two/, style);
       const [, count, report] = text.replace(/\s+/g, ' ').match(/SPACING (\d+) (.*?) END/) ?? [];
-      assert.equal(count, '12', `${style}: boxes found`);
-      // Safari sets a list that ends with a section up to 2px tighter than the same list without one, in some
-      // styles; Chrome sets them the same. Decision (John, 2026-11-26): allowed, as it's tighter, not looser.
-      const off = report === 'even' ? [] : report.split(' ; ').filter((item) => {
-        const [, where, a, b] = item.match(/^(.*)=(-?[\d.]+)\/(-?[\d.]+)$/);
-        return !(where.includes('list') && b - a > 0 && b - a <= 2);
-      });
-      assert.deepEqual(off, [], `${style}: space with a section/without, in Safari`);
+      assert.equal(count, '14', `${style}: boxes found`);
+      const measured = Object.fromEntries(report === 'even' ? [] : report.split(' ').map((item) => {
+        const [id, tighter] = item.split(':');
+        return [id, parseFloat(tighter)];
+      }));
+      const expected = SAFARI_TIGHTER[style] ?? {};
+      const off = [...new Set([...Object.keys(measured), ...Object.keys(expected)])]
+        .filter((id) => !(Math.abs((measured[id] ?? 0) - (expected[id] ?? 0)) <= 0.5))
+        .map((id) => `${id}: ${measured[id] ?? 0}px tighter with a section, expected ${expected[id] ?? 0}px`);
+      assert.deepEqual(off, [], `${style}, in Safari`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
