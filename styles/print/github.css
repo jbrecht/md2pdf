@@ -19,7 +19,12 @@ body {
   background: #fff;
 }
 
-/* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows. */
+/* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows and
+   none of the space below it inside a box the section ends. */
+.markdown-body details > :last-child,
+.markdown-body li:last-child > details:last-child {
+  margin-bottom: 0;
+}
 .markdown-body details::details-content {
   content-visibility: visible;
 }

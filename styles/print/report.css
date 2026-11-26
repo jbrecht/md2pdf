@@ -60,11 +60,12 @@ body {
 }
 
 /* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows and
-   the space of a paragraph below it, outside a box it ends. */
-.markdown-body details {
+   about a paragraph's space between it and the next block, none of it inside a box the section ends. */
+.markdown-body details:not(:last-child),
+.markdown-body li:not(:last-child) > details:last-child {
   margin-bottom: calc(0.8em * var(--md2pdf-space));
 }
-.markdown-body :is(blockquote, .markdown-alert, td, th) > details:last-child {
+.markdown-body details > :last-child {
   margin-bottom: 0;
 }
 .markdown-body details::details-content {

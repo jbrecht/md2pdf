@@ -1367,7 +1367,9 @@ test('every style trims the space below the last block of a printed document', (
 });
 
 // A closed section with a paragraph and a closed section in it, one whose body is bare text, a paragraph,
-// a quote that ends with a section, and a list item that does, before another item.
+// and a list item that ends with a section, before another item. Then boxes that end with a section, each
+// beside the same box ending in plain text: a quote, a callout, a nested section in a quote, and a list in a
+// callout whose last item is a section.
 const DETAILS_DOC = `<details><summary>Show the proof</summary>
 
 The hidden paragraph.
@@ -1386,6 +1388,11 @@ Forty-two
 
 The paragraph after.
 
+- <details><summary>Why</summary>
+  The reason.
+  </details>
+- The next item.
+
 > A quote that ends with a section:
 >
 > <details><summary>Hint</summary>
@@ -1394,10 +1401,43 @@ The paragraph after.
 >
 > </details>
 
-- <details><summary>Why</summary>
-  The reason.
-  </details>
-- The next item.
+> A quote that ends with a paragraph.
+
+> [!NOTE]
+> A callout that ends with a section:
+>
+> <details><summary>Hint</summary>
+>
+> The hint.
+>
+> </details>
+
+> [!NOTE]
+> A callout that ends with a paragraph.
+
+> A quote that ends with a nested section:
+>
+> <details><summary>Outer</summary>
+>
+> <details><summary>Inner</summary>
+>
+> The inner paragraph.
+>
+> </details>
+>
+> </details>
+
+> A quote that ends with a paragraph.
+
+> [!NOTE]
+> - An item.
+> - <details><summary>Last</summary>
+>   The last reason.
+>   </details>
+
+> [!NOTE]
+> - An item.
+> - The last item.
 `;
 
 test('every style prints a collapsed section open, its summary kept with its body (#102)', () => {
@@ -1424,8 +1464,22 @@ test('every style prints a collapsed section open, its summary kept with its bod
     breakAfter: summary.breakAfter,
     gap: document.querySelector('details + p').getBoundingClientRect().top - bare.getBoundingClientRect().bottom,
     paragraphSpace: parseFloat(getComputedStyle(document.querySelector('details + p')).marginBottom),
-    // The space below a section is outside a quote's box, but kept before the next list item.
-    lastMargin: getComputedStyle(document.querySelector('blockquote details')).marginBottom,
+    // A box that ends with a section keeps no more space inside it, below its last line, than the same box
+    // ending in plain text.
+    boxes: (() => {
+      const below = (box) => {
+        const walk = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, (t) => t.data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP);
+        let last;
+        while (walk.nextNode()) last = walk.currentNode;
+        const text = document.createRange();
+        text.selectNodeContents(last);
+        const style = getComputedStyle(box);
+        return box.getBoundingClientRect().bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom) - text.getBoundingClientRect().bottom;
+      };
+      const boxes = [...document.querySelectorAll('.markdown-body > :is(blockquote, .markdown-alert)')];
+      const names = ['quote', 'callout', 'nested', 'list'];
+      return names.map((name, i) => [name, below(boxes[2 * i]), below(boxes[2 * i + 1])]);
+    })(),
     itemGap: (() => {
       const reason = document.createRange();
       reason.selectNodeContents(document.querySelector('li details').lastChild);
@@ -1433,13 +1487,16 @@ test('every style prints a collapsed section open, its summary kept with its bod
     })(),
   };
 </script></body></html>`);
-      const { shown, marker, breakAfter, gap, paragraphSpace, lastMargin, itemGap } = probeInChrome(join(dir, 'd.html'), dir);
+      const { shown, marker, breakAfter, gap, paragraphSpace, boxes, itemGap } = probeInChrome(join(dir, 'd.html'), dir);
       assert.ok(shown, `${style} hides a collapsed section`);
       assert.equal(marker, 'disclosure-open', style);
       assert.equal(breakAfter, 'avoid', style);
       // A paragraph's space, plus the little of its last line that lies below the text.
       assert.ok(gap >= paragraphSpace && gap <= paragraphSpace + 4, `${style}: ${gap}px between a section's bare text and the paragraph after it, where paragraphs have ${paragraphSpace}px`);
-      assert.equal(lastMargin, '0px', `${style}: space below a section at the end of a quote`);
+      assert.equal(boxes.length, 4, style);
+      for (const [name, withSection, plain] of boxes) {
+        assert.ok(Math.abs(withSection - plain) <= 1, `${style}: ${withSection}px inside a ${name} box below a section, ${plain}px below plain text`);
+      }
       assert.ok(itemGap >= paragraphSpace && itemGap <= paragraphSpace + 4, `${style}: ${itemGap}px between a section's bare text and the next list item, where paragraphs have ${paragraphSpace}px`);
     }
   } finally {
