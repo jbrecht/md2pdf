@@ -1369,8 +1369,10 @@ test('every style trims the space below the last block of a printed document', (
 // A closed section with a paragraph and a closed section in it, one whose body is bare text, a paragraph,
 // and a list item that ends with a section, before another item. Then boxes that end with a section, each
 // beside the same box ending in plain text: a quote, a callout, a nested section in a quote, and a list in a
-// callout whose last item is a section. Last, a section that ends a <div> and one that ends in a code block,
-// each before a paragraph and beside the same thing outside a section.
+// callout whose last item is a section, and a callout that ends with a section ending in code. Then sections
+// in table cells, beside plain cells. Last, sections before a paragraph, each beside the same thing outside a
+// section: one that ends a <div>, one that ends in a code block, both together, and a section ending in a table
+// that ends another section.
 const DETAILS_DOC = `<details><summary>Show the proof</summary>
 
 The hidden paragraph.
@@ -1440,6 +1442,32 @@ The paragraph after.
 > - An item.
 > - The last item.
 
+> [!NOTE]
+> A callout that ends with a section:
+>
+> <details><summary>Code</summary>
+>
+> \`\`\`js
+> const v = 5;
+> \`\`\`
+>
+> </details>
+
+> [!NOTE]
+> A callout that ends with code:
+>
+> \`\`\`js
+> const u = 6;
+> \`\`\`
+
+| <details><summary>Head</summary>Hidden head</details> | x |
+|--|--|
+| <details><summary>More</summary>Hidden</details> | y |
+
+| Plain head | x |
+|--|--|
+| Plain cell | y |
+
 <div>
 
 <details><summary>Wrapped</summary>
@@ -1475,6 +1503,50 @@ const y = 2;
 \`\`\`
 
 After the code.
+
+<div>
+
+<details><summary>Wrapped code</summary>
+
+\`\`\`js
+const z = 3;
+\`\`\`
+
+</details>
+
+</div>
+
+After the wrapped code section.
+
+<div>
+
+\`\`\`js
+const w = 4;
+\`\`\`
+
+</div>
+
+After the wrapped code.
+
+<details><summary>Outer</summary>
+
+<details><summary>Table</summary>
+
+| a | b |
+|--|--|
+| 1 | 2 |
+
+</details>
+
+</details>
+
+After the nested table section.
+
+| a | b |
+|--|--|
+| 1 | 2 |
+
+After the table.
 `;
 
 test('every style prints a collapsed section open, its summary kept with its body (#102)', () => {
@@ -1518,8 +1590,16 @@ test('every style prints a collapsed section open, its summary kept with its bod
         return box.getBoundingClientRect().bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom) - lastLine(box);
       };
       const boxes = [...document.querySelectorAll('.markdown-body > :is(blockquote, .markdown-alert)')];
-      const names = ['quote', 'callout', 'nested', 'list'];
-      return { count: boxes.length, gaps: names.map((name, i) => [name, below(boxes[2 * i]), below(boxes[2 * i + 1])]) };
+      const names = ['quote', 'callout', 'nested', 'list', 'callout with code'];
+      const [cells, plain] = document.querySelectorAll('.markdown-body > table');
+      return {
+        count: boxes.length,
+        gaps: [
+          ...names.map((name, i) => [name, below(boxes[2 * i]), below(boxes[2 * i + 1])]),
+          ['header cell', below(cells.querySelector('th')), below(plain.querySelector('th'))],
+          ['cell', below(cells.querySelector('td')), below(plain.querySelector('td'))],
+        ],
+      };
     })(),
     // A section followed by a paragraph keeps the space the same block outside a section would.
     followers: (() => {
@@ -1530,6 +1610,8 @@ test('every style prints a collapsed section open, its summary kept with its bod
       return [
         ['a <div>', after('After the wrapped section.'), after('After the wrapped paragraph.')],
         ['a code block', after('After the section with code.'), after('After the code.')],
+        ['a code block in a <div>', after('After the wrapped code section.'), after('After the wrapped code.')],
+        ['a table in a section', after('After the nested table section.'), after('After the table.')],
       ];
     })(),
     itemGap: (() => {
@@ -1537,15 +1619,22 @@ test('every style prints a collapsed section open, its summary kept with its bod
       reason.selectNodeContents(document.querySelector('li details').lastChild);
       return document.querySelector('li + li').getBoundingClientRect().top - reason.getBoundingClientRect().bottom;
     })(),
+    // The space after a section follows the reader's spacing setting. Measured last, as it changes the page.
+    spaceScale: (() => {
+      const space = () => parseFloat(getComputedStyle(answer).marginBottom);
+      const one = space();
+      document.querySelector('.markdown-body').style.setProperty('--md2pdf-space', '3');
+      return space() / one;
+    })(),
   };
 </script></body></html>`);
-      const { shown, marker, breakAfter, gap, paragraphSpace, boxes, followers, itemGap } = probeInChrome(join(dir, 'd.html'), dir);
+      const { shown, marker, breakAfter, gap, paragraphSpace, boxes, followers, itemGap, spaceScale } = probeInChrome(join(dir, 'd.html'), dir);
       assert.ok(shown, `${style} hides a collapsed section`);
       assert.equal(marker, 'disclosure-open', style);
       assert.equal(breakAfter, 'avoid', style);
       // A paragraph's space, plus the little of its last line that lies below the text.
       assert.ok(gap >= paragraphSpace && gap <= paragraphSpace + 4, `${style}: ${gap}px between a section's bare text and the paragraph after it, where paragraphs have ${paragraphSpace}px`);
-      assert.equal(boxes.count, 8, `${style}: boxes found`);
+      assert.equal(boxes.count, 10, `${style}: boxes found`);
       for (const [name, withSection, plain] of boxes.gaps) {
         assert.ok(Math.abs(withSection - plain) <= 1, `${style}: ${withSection}px inside a ${name} box below a section, ${plain}px below plain text`);
       }
@@ -1553,6 +1642,7 @@ test('every style prints a collapsed section open, its summary kept with its bod
         assert.ok(Math.abs(withSection - plain) <= 1, `${style}: ${withSection}px after a section ending ${name}, ${plain}px after ${name} alone`);
       }
       assert.ok(itemGap >= paragraphSpace && itemGap <= paragraphSpace + 4, `${style}: ${itemGap}px between a section's bare text and the next list item, where paragraphs have ${paragraphSpace}px`);
+      assert.ok(Math.abs(spaceScale - 3) < 0.01, `${style}: the space after a section scales ${spaceScale}× with --md2pdf-space 3`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -1579,15 +1669,25 @@ test('the CLI opens every section, so one without a summary prints the open arro
   // The browser draws a section without a <summary> its own label, whose arrow only opening the section turns.
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
   try {
-    writeFileSync(join(dir, 's.md'), '<details>\n\nNo summary.\n\n</details>\n\n<DETAILS><summary>Loud</summary>\n\nShouting.\n\n</DETAILS>\n');
-    assert.equal(run('--html', join(dir, 's.md')).status, 0);
-    writeFileSync(join(dir, 's.html'), readFileSync(join(dir, 's.html'), 'utf8').replace('</body>',
-      `<script>window.probeOut = () => [...document.querySelectorAll('details')].map((d) => d.open);</script></body>`));
-    assert.deepEqual(probeInChrome(join(dir, 's.html'), dir, { afterLoad: true }), [true, true]);
+    // Each document's only sections are written one way: in capitals with attributes, in a named group
+    // (where opening one closes the rest), and self-closed.
+    const docs = {
+      written: '<DETAILS class="a">\n\nNo summary.\n\n</DETAILS>\n\n<Details data-x="1"><summary>Loud</summary>\n\nShouting.\n\n</Details>\n',
+      grouped: '<details name="g">\n\nFirst.\n\n</details>\n\n<details name="g">\n\nSecond.\n\n</details>\n',
+      closed: '<details/>\n\nSelf-closed.\n\n</details>\n',
+    };
+    for (const [name, markdown] of Object.entries(docs)) {
+      writeFileSync(join(dir, `${name}.md`), markdown);
+      assert.equal(run('--html', join(dir, `${name}.md`)).status, 0);
+      writeFileSync(join(dir, `${name}.html`), readFileSync(join(dir, `${name}.html`), 'utf8').replace('</body>',
+        `<script>window.probeOut = () => [...document.querySelectorAll('details')].map((d) => d.open);</script></body>`));
+      const open = probeInChrome(join(dir, `${name}.html`), dir, { afterLoad: true });
+      assert.ok(open.length > 0 && open.every(Boolean), `${name}: ${JSON.stringify(open)}`);
+    }
     // A document without a section, even one that shows the tag as code, gets no script.
     writeFileSync(join(dir, 'none.md'), 'Write `<details>` to fold a section.\n');
     assert.equal(run('--html', join(dir, 'none.md')).status, 0);
-    assert.doesNotMatch(readFileSync(join(dir, 'none.html'), 'utf8'), /section\.open = true/);
+    assert.doesNotMatch(readFileSync(join(dir, 'none.html'), 'utf8'), /querySelectorAll\('details'\)/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -2327,7 +2427,13 @@ test('Safari prints a collapsed section open in every style (#102)', { skip: !sw
       mkdirSync(join(dir, style));
       const r = run('-s', style, '--html', '-o', join(dir, style, 'doc.pdf'), join(dir, 'doc.md'));
       assert.equal(r.status, 0, r.stderr);
-      return join(dir, style, 'doc.html');
+      // Without the CLI's script that opens each section, as md2pdf.me prints, so only the stylesheet opens them.
+      const page = join(dir, style, 'doc.html');
+      const html = readFileSync(page, 'utf8');
+      const opener = /<script>document\.addEventListener\('DOMContentLoaded', \(\) => \{\n  for \(const section of document\.querySelectorAll\('details'\)\)[^]*?<\/script>/;
+      assert.match(html, opener, style);
+      writeFileSync(page, html.replace(opener, ''));
+      return page;
     });
     execFileSync('swiftc', ['-O', join(ROOT, 'test', 'webkit-print.swift'), '-o', join(dir, 'webkit-print')], { stdio: 'pipe' });
     execFileSync(join(dir, 'webkit-print'), pages, { stdio: 'pipe', timeout: 120_000 });

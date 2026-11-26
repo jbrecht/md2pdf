@@ -91,14 +91,16 @@ body {
   background: #fff;
 }
 
-/* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows and
-   at least a paragraph's space after it, none of it inside a box the section ends. In a nested list, the
-   space before the next item is an item's, as for plain text. */
+/* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows. After it
+   comes a paragraph's space, or its last block's if that is more. A section that ends a quote, callout,
+   table cell or a list's last item gives up that space, as does one ending that section, so none shows
+   inside the box; at the end of a nested list, the next item is then an item's space away, as after text. */
 .markdown-body details {
   margin-bottom: calc(0.8em * var(--md2pdf-space));
 }
-.markdown-body :is(blockquote, .markdown-alert, td, th, li:last-child, details) > details:last-child,
-.markdown-body details:last-child > :last-child {
+.markdown-body :is(blockquote, .markdown-alert, td, th, li:last-child) > details:last-child,
+.markdown-body :is(blockquote, .markdown-alert, td, th, li:last-child) > details:last-child > :last-child,
+.markdown-body :is(blockquote, .markdown-alert, td, th, li:last-child) > details:last-child > details:last-child > :last-child {
   margin-bottom: 0;
 }
 .markdown-body details::details-content {

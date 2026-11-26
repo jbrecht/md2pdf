@@ -162,10 +162,16 @@ function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
 <script>document.addEventListener('DOMContentLoaded', ${loadFonts});</script>${extra?.head.length ? `
 <script>addEventListener('load', ${loadFonts});</script>` : ''}${
       // The print stylesheet shows a collapsed section's content, but can't reach the closed arrow the
-      // browser draws for one without a <summary>. Opening each section fixes both.
-      /<details[\s>]/i.test(bodyHtml)
+      // browser draws for one without a <summary>. Opening each section turns that arrow too. Opening one
+      // section of a named group closes the rest, so each leaves its group first.
+      /<details[\s/>]/i.test(bodyHtml)
         ? `
-<script>document.addEventListener('DOMContentLoaded', () => { for (const section of document.querySelectorAll('details')) section.open = true; });</script>`
+<script>document.addEventListener('DOMContentLoaded', () => {
+  for (const section of document.querySelectorAll('details')) {
+    section.removeAttribute('name');
+    section.open = true;
+  }
+});</script>`
         : ''
     }${
       // A displayed formula wider than the column shrinks to fit, once its fonts have loaded. It fits
