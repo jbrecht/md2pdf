@@ -1575,6 +1575,24 @@ test('the CLI prints all of a collapsed section in every style (#102)', () => {
   }
 });
 
+test('the CLI opens every section, so one without a summary prints the open arrow too (#102)', () => {
+  // The browser draws a section without a <summary> its own label, whose arrow only opening the section turns.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 's.md'), '<details>\n\nNo summary.\n\n</details>\n\n<DETAILS><summary>Loud</summary>\n\nShouting.\n\n</DETAILS>\n');
+    assert.equal(run('--html', join(dir, 's.md')).status, 0);
+    writeFileSync(join(dir, 's.html'), readFileSync(join(dir, 's.html'), 'utf8').replace('</body>',
+      `<script>window.probeOut = () => [...document.querySelectorAll('details')].map((d) => d.open);</script></body>`));
+    assert.deepEqual(probeInChrome(join(dir, 's.html'), dir, { afterLoad: true }), [true, true]);
+    // A document without a section, even one that shows the tag as code, gets no script.
+    writeFileSync(join(dir, 'none.md'), 'Write `<details>` to fold a section.\n');
+    assert.equal(run('--html', join(dir, 'none.md')).status, 0);
+    assert.doesNotMatch(readFileSync(join(dir, 'none.html'), 'utf8'), /section\.open = true/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('worksheet style prints with its bundled fonts', () => {
   // One page, so it has no page number, which is set in Fredoka too.
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));

@@ -161,6 +161,13 @@ function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
     head: `<base href="${pathToFileURL(baseDir + '/').href}">
 <script>document.addEventListener('DOMContentLoaded', ${loadFonts});</script>${extra?.head.length ? `
 <script>addEventListener('load', ${loadFonts});</script>` : ''}${
+      // The print stylesheet shows a collapsed section's content, but can't reach the closed arrow the
+      // browser draws for one without a <summary>. Opening each section fixes both.
+      /<details[\s>]/i.test(bodyHtml)
+        ? `
+<script>document.addEventListener('DOMContentLoaded', () => { for (const section of document.querySelectorAll('details')) section.open = true; });</script>`
+        : ''
+    }${
       // A displayed formula wider than the column shrinks to fit, once its fonts have loaded. It fits
       // whatever column it ends up in, so the printed page needs no second run.
       /<eqn>/.test(bodyHtml)
