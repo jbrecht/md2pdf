@@ -69,12 +69,13 @@ body {
 }
 
 /* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows and
-   about a paragraph's space between it and the next block, none of it inside a box the section ends. */
-.markdown-body details:not(:last-child),
-.markdown-body li:not(:last-child) > details:last-child {
+   at least a paragraph's space after it, none of it inside a box the section ends. In a nested list, the
+   space before the next item is an item's, as for plain text. */
+.markdown-body details {
   margin-bottom: calc(0.75em * var(--md2pdf-space));
 }
-.markdown-body details > :last-child {
+.markdown-body :is(blockquote, .markdown-alert, td, th, li:last-child, details) > details:last-child,
+.markdown-body details:last-child > :last-child {
   margin-bottom: 0;
 }
 .markdown-body details::details-content {

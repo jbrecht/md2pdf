@@ -21,8 +21,8 @@ body {
 
 /* A PDF can't be clicked, so a collapsed section prints open, its summary kept with what follows and
    none of the space below it inside a box the section ends. */
-.markdown-body details > :last-child,
-.markdown-body li:last-child > details:last-child {
+.markdown-body :is(blockquote, .markdown-alert, td, th, li:last-child, details) > details:last-child,
+.markdown-body details:last-child > :last-child {
   margin-bottom: 0;
 }
 .markdown-body details::details-content {

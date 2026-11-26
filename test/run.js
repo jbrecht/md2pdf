@@ -1369,7 +1369,8 @@ test('every style trims the space below the last block of a printed document', (
 // A closed section with a paragraph and a closed section in it, one whose body is bare text, a paragraph,
 // and a list item that ends with a section, before another item. Then boxes that end with a section, each
 // beside the same box ending in plain text: a quote, a callout, a nested section in a quote, and a list in a
-// callout whose last item is a section.
+// callout whose last item is a section. Last, a section that ends a <div> and one that ends in a code block,
+// each before a paragraph and beside the same thing outside a section.
 const DETAILS_DOC = `<details><summary>Show the proof</summary>
 
 The hidden paragraph.
@@ -1438,6 +1439,42 @@ The paragraph after.
 > [!NOTE]
 > - An item.
 > - The last item.
+
+<div>
+
+<details><summary>Wrapped</summary>
+
+The wrapped paragraph.
+
+</details>
+
+</div>
+
+After the wrapped section.
+
+<div>
+
+The wrapped plain paragraph.
+
+</div>
+
+After the wrapped paragraph.
+
+<details><summary>Code</summary>
+
+\`\`\`js
+const x = 1;
+\`\`\`
+
+</details>
+
+After the section with code.
+
+\`\`\`js
+const y = 2;
+\`\`\`
+
+After the code.
 `;
 
 test('every style prints a collapsed section open, its summary kept with its body (#102)', () => {
@@ -1455,6 +1492,15 @@ test('every style prints a collapsed section open, its summary kept with its bod
   const bare = document.createRange();
   bare.selectNodeContents(answer.lastChild);
   const summary = getComputedStyle(proof.querySelector('summary'));
+  // Where the last line of text in an element ends.
+  const lastLine = (element) => {
+    const walk = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, (t) => t.data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP);
+    let last;
+    while (walk.nextNode()) last = walk.currentNode;
+    const text = document.createRange();
+    text.selectNodeContents(last);
+    return text.getBoundingClientRect().bottom;
+  };
   window.probeOut = {
     // Chrome lays out a closed section's content when asked for its size, so ask whether it is visible
     // and whether the section is taller than its summary.
@@ -1468,17 +1514,23 @@ test('every style prints a collapsed section open, its summary kept with its bod
     // ending in plain text.
     boxes: (() => {
       const below = (box) => {
-        const walk = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, (t) => t.data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP);
-        let last;
-        while (walk.nextNode()) last = walk.currentNode;
-        const text = document.createRange();
-        text.selectNodeContents(last);
         const style = getComputedStyle(box);
-        return box.getBoundingClientRect().bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom) - text.getBoundingClientRect().bottom;
+        return box.getBoundingClientRect().bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom) - lastLine(box);
       };
       const boxes = [...document.querySelectorAll('.markdown-body > :is(blockquote, .markdown-alert)')];
       const names = ['quote', 'callout', 'nested', 'list'];
-      return names.map((name, i) => [name, below(boxes[2 * i]), below(boxes[2 * i + 1])]);
+      return { count: boxes.length, gaps: names.map((name, i) => [name, below(boxes[2 * i]), below(boxes[2 * i + 1])]) };
+    })(),
+    // A section followed by a paragraph keeps the space the same block outside a section would.
+    followers: (() => {
+      const after = (text) => {
+        const p = [...document.querySelectorAll('.markdown-body > p')].find((p) => p.textContent === text);
+        return p.getBoundingClientRect().top - lastLine(p.previousElementSibling);
+      };
+      return [
+        ['a <div>', after('After the wrapped section.'), after('After the wrapped paragraph.')],
+        ['a code block', after('After the section with code.'), after('After the code.')],
+      ];
     })(),
     itemGap: (() => {
       const reason = document.createRange();
@@ -1487,15 +1539,18 @@ test('every style prints a collapsed section open, its summary kept with its bod
     })(),
   };
 </script></body></html>`);
-      const { shown, marker, breakAfter, gap, paragraphSpace, boxes, itemGap } = probeInChrome(join(dir, 'd.html'), dir);
+      const { shown, marker, breakAfter, gap, paragraphSpace, boxes, followers, itemGap } = probeInChrome(join(dir, 'd.html'), dir);
       assert.ok(shown, `${style} hides a collapsed section`);
       assert.equal(marker, 'disclosure-open', style);
       assert.equal(breakAfter, 'avoid', style);
       // A paragraph's space, plus the little of its last line that lies below the text.
       assert.ok(gap >= paragraphSpace && gap <= paragraphSpace + 4, `${style}: ${gap}px between a section's bare text and the paragraph after it, where paragraphs have ${paragraphSpace}px`);
-      assert.equal(boxes.length, 4, style);
-      for (const [name, withSection, plain] of boxes) {
+      assert.equal(boxes.count, 8, `${style}: boxes found`);
+      for (const [name, withSection, plain] of boxes.gaps) {
         assert.ok(Math.abs(withSection - plain) <= 1, `${style}: ${withSection}px inside a ${name} box below a section, ${plain}px below plain text`);
+      }
+      for (const [name, withSection, plain] of followers) {
+        assert.ok(Math.abs(withSection - plain) <= 1, `${style}: ${withSection}px after a section ending ${name}, ${plain}px after ${name} alone`);
       }
       assert.ok(itemGap >= paragraphSpace && itemGap <= paragraphSpace + 4, `${style}: ${itemGap}px between a section's bare text and the next list item, where paragraphs have ${paragraphSpace}px`);
     }
