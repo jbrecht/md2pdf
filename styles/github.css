@@ -24,10 +24,12 @@
   --md2pdf-code-font: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
 }
 
-/* github-markdown-light.css draws focus rings in this color but leaves it to github-markdown.css to
-   define; undefined, it turns off the browser's own ring. */
+/* github-markdown-light.css draws focus rings, and <kbd>'s border and shadow, in these colors but
+   leaves them to github-markdown.css to define. Undefined, the ring turns off the browser's own, and
+   <kbd> loses its border and shadow. --borderColor-muted is github-markdown.css's light value (5.9.0). */
 :where(.markdown-body) {
   --borderColor-accent-emphasis: var(--md2pdf-accent);
+  --borderColor-muted: #d1d9e0b3;
 }
 
 /* highlight.js's GitHub theme, limited to the document. From highlight.js 11.12.0.
@@ -195,11 +197,13 @@
 }
 
 /* github-markdown-css sets footnotes and keys in px, so they're restated as their share of the text
-   size, the same at 11pt. */
+   size, the same at 11pt. A key's padding stays github-markdown-css's 0.25rem (3pt here) but shrinks
+   with smaller text, or the key, border included, makes its line taller. */
 .markdown-body .footnotes {
   font-size: calc(9 / 11 * var(--md2pdf-font-size));
 }
 .markdown-body kbd {
+  padding: min(0.25rem, calc(3 / 11 * var(--md2pdf-font-size)));
   font-size: calc(8.25 / 11 * var(--md2pdf-font-size));
   line-height: calc(7.5 / 11 * var(--md2pdf-font-size));
 }
