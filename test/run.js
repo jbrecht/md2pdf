@@ -499,6 +499,20 @@ const fitTablesProbe = (column) => `<script>
       if (table.rows[0].cells[0].textContent.trim() === 'Id') {
         for (const row of table.rows) for (const cell of [...row.cells].slice(0, 3)) if (cell.matches(FIT)) out.problems.push(\`\${name}: "\${cell.textContent}" may break\`);
       }
+      // Its formulas are as large as fits: no smaller than full size if the table fits at that size.
+      const reach = () => {
+        const parent = table.parentElement;
+        const s = getComputedStyle(parent);
+        const edge = parent.getBoundingClientRect().right - parseFloat(s.borderRightWidth) - parseFloat(s.paddingRight);
+        return Math.max(table.getBoundingClientRect().right, ...[...table.rows].map((row) => row.getBoundingClientRect().right)) - edge;
+      };
+      const shrunk = [...table.querySelectorAll('.katex')].filter((formula) => formula.matches(FIT));
+      if (shrunk.length) {
+        const sizes = shrunk.map((formula) => formula.style.fontSize);
+        for (const formula of shrunk) formula.style.removeProperty('font-size');
+        if (reach() <= 0) out.problems.push(\`\${name}: its formulas shrink, though it fits with them at full size\`);
+        shrunk.forEach((formula, i) => (formula.style.fontSize = sizes[i]));
+      }
       // A formula in a cell shrinks to half size before any word breaks.
       const formulas = [...table.querySelectorAll('.katex')].filter((formula) => formula.matches(FIT));
       if (formulas.length && table.querySelector(\`:is(td, th)\${FIT}\`) && !unfitted(table, () => overflows(table), true)) {

@@ -52,3 +52,7 @@ Tables too wide for the page even with their cells wrapped. Each prints every co
 | Term | Formula | Note |
 |---|---|---|
 | Sum | $$a_1 + a_2 + a_3 + a_4 + a_5 + a_6 + a_7 + a_8 + a_9 + a_{10} + a_{11} + a_{12} + a_{13} + a_{14} + a_{15} + a_{16} + a_{17} + a_{18} + a_{19} + a_{20} + a_{21} + a_{22} + a_{23} + a_{24} + a_{25} + a_{26} + a_{27} + a_{28} = S$$ | Incomprehensibilities |
+
+| Formula | Identifier | Configuration | Authentication | Synchronization |
+|---|---|---|---|---|
+| $$x$$ | Supercalifragilisticexpialidocious | Antidisestablishmentarianism | Pneumonoultramicroscopicsilicovolcanoconiosis | Floccinaucinihilipilification |
