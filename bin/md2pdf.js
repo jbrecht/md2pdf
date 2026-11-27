@@ -11,7 +11,7 @@ import { createRequire } from 'node:module';
 
 import hljs from 'highlight.js';
 import { buildDocument, createRenderer, titleOf } from '../lib/render.js';
-import { fitFormulas } from '../lib/fit.js';
+import { fitFormulas, fitTables } from '../lib/fit.js';
 import { rewriteUrls, splitImports } from '../lib/css.js';
 import { PAPER, isPageSize } from '../lib/page-size.js';
 
@@ -149,6 +149,10 @@ function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
   const extra = extraCss ? splitImports(readCss(extraCss)) : null;
   const css = [...(extra ? extra.head : []), ...STYLES[style].map(readCss), ...math, ...(extra ? [extra.rest] : [])].join('\n');
   const loadFonts = `() => document.fonts.forEach((f) => f.load().catch(() => {}))`;
+  // Once its fonts have loaded, a displayed formula wider than the column shrinks to fit. It fits whatever
+  // column it ends up in, so the printed page needs no second run. Then a table wider than the printed page
+  // fits it, measured at that page's width; it goes second, since fitFormulas resets a formula in a cell.
+  const fits = [...(/<eqn>/.test(bodyHtml) ? [fitFormulas] : []), ...(/<table[\s>]/i.test(bodyHtml) ? [fitTables] : [])];
   return buildDocument({
     bodyHtml,
     title,
@@ -173,13 +177,10 @@ function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
   }
 });</script>`
         : ''
-    }${
-      // A displayed formula wider than the column shrinks to fit, once its fonts have loaded. It fits
-      // whatever column it ends up in, so the printed page needs no second run.
-      /<eqn>/.test(bodyHtml)
+    }${fits.length
         ? `
-<script>${fitFormulas}
-addEventListener('load', () => document.fonts.ready.then(() => fitFormulas()));</script>`
+<script>${fits.join('\n')}
+addEventListener('load', () => document.fonts.ready.then(() => { ${fits.map((fit) => `${fit.name}();`).join(' ')} }));</script>`
         : ''
     }`,
   });
