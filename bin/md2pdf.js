@@ -11,6 +11,7 @@ import { createRequire } from 'node:module';
 
 import hljs from 'highlight.js';
 import { buildDocument, createRenderer, titleOf } from '../lib/render.js';
+import { fitFormulas } from '../lib/fit.js';
 import { rewriteUrls, splitImports } from '../lib/css.js';
 import { PAPER, isPageSize } from '../lib/page-size.js';
 
@@ -159,7 +160,28 @@ function buildHtml({ markdown, title, baseDir, style, extraCss, pageSize }) {
     // stylesheet's fonts may not be declared until the page has loaded, so they start then.
     head: `<base href="${pathToFileURL(baseDir + '/').href}">
 <script>document.addEventListener('DOMContentLoaded', ${loadFonts});</script>${extra?.head.length ? `
-<script>addEventListener('load', ${loadFonts});</script>` : ''}`,
+<script>addEventListener('load', ${loadFonts});</script>` : ''}${
+      // The print stylesheet shows a collapsed section's content, but can't reach the closed arrow the
+      // browser draws for one without a <summary>. Opening each section turns that arrow too. Opening one
+      // section of a named group closes the rest, so each leaves its group first.
+      /<details[\s/>]/i.test(bodyHtml)
+        ? `
+<script>document.addEventListener('DOMContentLoaded', () => {
+  for (const section of document.querySelectorAll('details')) {
+    section.removeAttribute('name');
+    section.open = true;
+  }
+});</script>`
+        : ''
+    }${
+      // A displayed formula wider than the column shrinks to fit, once its fonts have loaded. It fits
+      // whatever column it ends up in, so the printed page needs no second run.
+      /<eqn>/.test(bodyHtml)
+        ? `
+<script>${fitFormulas}
+addEventListener('load', () => document.fonts.ready.then(() => fitFormulas()));</script>`
+        : ''
+    }`,
   });
 }
 
