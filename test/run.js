@@ -526,8 +526,8 @@ const probeFitTables = (dir, name, column, ...args) => {
   assert.equal(r.status, 0, r.stderr);
   writeFileSync(join(dir, `${name}.html`), readFileSync(join(dir, `${name}.html`), 'utf8').replace('</body>', fitTablesProbe(column)));
   const out = probeInChrome(join(dir, `${name}.html`), dir, { afterLoad: true });
-  assert.equal(out.hasFit, 'function', `${name}: the page runs fitTables`);
   assert.deepEqual(out.problems, [], `${name}: ${out.problems.length} problems, such as ${JSON.stringify(out.problems.slice(0, 4))}`);
+  assert.equal(out.hasFit, 'function', `${name}: the page runs fitTables`);
   assert.equal(out.htmlStyle, null, `${name}: the page's width is put back`);
   assert.equal(out.rerun, 'same', `${name}: running fitTables again changes nothing`);
   assert.equal(out.rerunHtmlStyle, null, name);
