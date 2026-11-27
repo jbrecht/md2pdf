@@ -568,6 +568,31 @@ test('titleOf reads the heading as it renders, never a # line in code', () => {
   assert.equal(titleOf('## Not a title\n\nUnderlined\n===\n', 'stem'), 'Underlined');
 });
 
+test('titleOf reads a title written in raw HTML, the same h1 as the running header (#114)', () => {
+  const md = createRenderer({ hljs });
+  const both = (src) => {
+    const title = titleOf(src, 'stem');
+    assert.equal(title, headingText(md.render(src)) || 'stem', src);
+    return title;
+  };
+  assert.equal(both('<h1>Café &amp; menu</h1>'), 'Café & menu');
+  assert.equal(both('---\ntitle: Old\n---\n<h1>New</h1>'), 'New');
+  // Whichever comes first, Markdown or raw HTML.
+  assert.equal(both('# Markdown\n\n<h1>Raw</h1>'), 'Markdown');
+  assert.equal(both('<h1>Raw</h1>\n\n# Markdown'), 'Raw');
+  assert.equal(both('Text <H1 class=x>Inline</H1 > more'), 'Inline');
+  assert.equal(both('<h1>\n\nA *b*\n\n</h1>'), 'A b');
+  assert.equal(both('<h1>Unclosed\n\n# Markdown'), 'Unclosed\nMarkdown');
+  // An h1 in a comment or an attribute value isn't one, and a comment that never closes hides the rest.
+  assert.equal(both('<!-- <h1>No</h1> -->\n\n# Yes'), 'Yes');
+  assert.equal(both('<p><img alt="<h1>x</h1>"></p>\n\n# Real'), 'Real');
+  assert.equal(both('<div><!--\n\n# Hidden\n\n-->'), 'stem');
+  assert.equal(both('<h1></h1>\n\n# Later'), 'stem');
+  // Code after raw HTML renders too.
+  assert.equal(both('<br>\n\n```js\nlet a = 1 < 2;\n```\n\n# After code'), 'After code');
+  assert.equal(both('<h1>\n\n```js\nlet a = 1 < 2;\n```\n\n</h1>'), 'let a = 1 < 2;');
+});
+
 test('the CLI titles the PDF with the heading as it renders', () => {
   const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
   try {
@@ -1089,6 +1114,44 @@ test('an unknown page size is an error; names, orientations and lengths are take
   // The size is written as given, not tidied, so a PDF made before #111 prints the same.
   assert.equal(run('--html', '-o', join(dir, 'sized.pdf'), '-p', 'A4  Landscape', join(dir, 'sample.md')).status, 0);
   assert.match(readFileSync(join(dir, 'sized.html'), 'utf8'), /@page \{ size: A4 {2}Landscape; \}/);
+});
+
+test("buildDocument's css can't end its style element, and means what it did (#119)", () => {
+  const closers = ['</style>', '</STYLE >', '</style/>', '</sTyLe\t', '</style'];
+  for (const closer of closers) {
+    const doc = buildDocument({ bodyHtml: '<p>x</p>', title: 't', css: `p { color: red }${closer}<img src=x onerror=alert(1)>` });
+    assert.equal(doc.match(/<\/style/gi).length, 1, closer);
+    assert.match(doc, /<\/style>\n<\/head>/);
+  }
+  // CSS without one is written as given.
+  const css = `@font-face { font-family: "A"; src: url("fonts/a.woff2") format("woff2"), url(b.woff) }
+/* a comment </sty le> */ p::after { content: "<\/" '\\3c /style>' } a[href^="<"] { color: rgb(1 2 3) }`;
+  assert.ok(buildDocument({ bodyHtml: '', title: 't', css }).includes(`<style>\n${css}\n@page`));
+  // In Chrome, the escaped CSS keeps its meaning, the rules after it apply, and nothing reads as HTML.
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const probe = `<script>
+      const content = (id) => getComputedStyle(document.getElementById(id), '::after').content;
+      window.probeOut = {
+        a: content('a'), b: content('b'), image: getComputedStyle(document.getElementById('c')).backgroundImage,
+        color: getComputedStyle(document.getElementById('a')).color, styles: document.querySelectorAll('style').length,
+        injected: document.querySelectorAll('img, #injected').length,
+        title: getComputedStyle(document.documentElement).getPropertyValue('--document-title'),
+      };
+    </script>`;
+    writeFileSync(join(dir, 'doc.html'), buildDocument({
+      bodyHtml: `<h1>Title</h1><p id="a">a</p><p id="b">b</p><p id="c">c</p>${probe}`,
+      title: 't',
+      css: `#a::after { content: "</style><p id=injected>" } #b::after { content: '</STYLE >' }
+#c { background-image: url(x</style>.png) } #a { color: rgb(1, 2, 3) }</style><img src=x>`,
+    }));
+    const out = probeInChrome(join(dir, 'doc.html'), dir);
+    assert.deepEqual({ ...out, image: out.image.endsWith('/x%3C/style%3E.png")') }, {
+      a: '"</style><p id=injected>"', b: '"</STYLE >"', image: true, color: 'rgb(1, 2, 3)', styles: 1, injected: 0, title: '"Title"',
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('buildDocument takes only the page sizes the CLI takes, and writes them as given (#111)', () => {
@@ -3079,6 +3142,14 @@ test('adversarial Markdown renders in about the time markdown-it takes', async (
     ['block scalars', `${'>\n\n \ntitle: '.repeat(80000)}>`],
   ]) {
     const took = elapsed(() => titleOf(`---\ntitle: ${title}\n---\n`, 'stem'));
+    if (took >= 500) slow.push(`titleOf, ${name}: ${Math.round(took)} ms`);
+  }
+  // Many tokens that may close an h1 but don't: titleOf looks for the h1 again only as its HTML doubles.
+  for (const [name, src] of [
+    ['an unclosed h1, then </h1 in attributes', `<h1>a\n\n${'<img alt="</h1>">\n\n'.repeat(20000)}`],
+    ['</h1 in comments, then a heading', `${'<!-- </h1> -->\n\n'.repeat(20000)}# end`],
+  ]) {
+    const took = elapsed(() => titleOf(src, 'stem'));
     if (took >= 500) slow.push(`titleOf, ${name}: ${Math.round(took)} ms`);
   }
   // Raw HTML in the running header, before #100.
