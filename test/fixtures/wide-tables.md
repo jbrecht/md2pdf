@@ -2,10 +2,10 @@
 
 Tables wider than their text that fit by wrapping at spaces. None of them changes.
 
-| Plan | Price | Seats | Storage | Support | Uptime | Region | Backups | Audit log | SSO |
-| ---- | ----- | ----- | ------- | ------- | ------ | ------ | ------- | --------- | --- |
-| Starter | $9 per month | 3 seats | 10 GB storage | Email support | 99.5 percent | United States | Daily backups | Not included | Not included |
-| Business | $49 per month | 25 seats | 1 TB storage | Phone and email support | 99.9 percent | United States or Europe | Hourly backups | Included | Included |
+| Plan | Price | Storage | Support | Region |
+| ---- | ----- | ------- | ------- | ------ |
+| Starter | $9 per month | 10 GB of storage | Email support on weekdays | United States |
+| Business | $49 per month | 1 TB of storage | Phone and email support at any hour | United States or Europe |
 
 | Option | What it does |
 | --- | --- |
@@ -14,15 +14,15 @@ Tables wider than their text that fit by wrapping at spaces. None of them change
 
 - A list item holding a table:
 
-  | Column one | Column two | Column three | Column four | Column five | Column six |
-  | --- | --- | --- | --- | --- | --- |
-  | Some words that wrap | More words that wrap here | Still more words | And yet more words to wrap | Words | The last column's words |
+  | Column one | Column two | Column three | Column four |
+  | --- | --- | --- | --- |
+  | Some words that wrap | More words that wrap here | Still more words | And yet more words to wrap |
 
 > A quote holding a table:
 >
 > | Name | Value | Notes |
 > | --- | --- | --- |
-> | `config.json` | `~/.config/md2pdf/config.json` | Where the style you chose is kept, written the first time you choose one. |
+> | `config.json` | `~/.config/md2pdf` | Where the style you chose is kept, written the first time you choose one. |
 
 | Name | Formula |
 | --- | --- |
