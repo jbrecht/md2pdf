@@ -425,6 +425,181 @@ test('the CLI adds the formula-fitting script only to a document with a displaye
   }
 });
 
+// The printed column's width in px: the paper's width less the style's side margins, or `margins`'.
+const PAPER_WIDTH = { Letter: 8.5 * 96, A4: (210 / 25.4) * 96 };
+const printedColumn = (size, margins) => {
+  const [, right = margins.split(' ')[0], , left = right] = margins.split(' ');
+  return PAPER_WIDTH[size] - (parseFloat(left) + parseFloat(right)) * 96;
+};
+
+// Single-cell tables of one long word, from 30 to 150 characters: across every style's column at both
+// paper sizes, so some fit and some don't, and which ones depends on the column.
+const WORD_SERIES = Array.from({ length: 121 }, (_, i) => `| n |\n|---|\n| ${'abcdefghij'.repeat(15).slice(0, 30 + i)} |\n`).join('\n');
+
+// Lays the page out at the printed column's width, as fitTables does, and reports each table that runs
+// past its box or has a cell whose content runs past it; whether each table was fitted, and whether it
+// would run past its box if it hadn't been. Then runs fitTables again at screen width.
+const fitTablesProbe = (column) => `<script>
+  window.probeOut = () => {
+    const html = document.documentElement;
+    const out = { htmlStyle: html.getAttribute('style'), hasFit: typeof fitTables, problems: [], series: [] };
+    const FIT = '[data-md2pdf-fit]';
+    const overflows = (table) => {
+      const parent = table.parentElement;
+      const s = getComputedStyle(parent);
+      const edge = parent.getBoundingClientRect().right - parseFloat(s.borderRightWidth) - parseFloat(s.paddingRight);
+      return Math.max(table.getBoundingClientRect().right, ...[...table.rows].map((row) => row.getBoundingClientRect().right)) > edge + 1;
+    };
+    // Runs f with the table as it was before it was fitted; with \`half\`, its fitted formulas at half size.
+    const unfitted = (table, f, half = false) => {
+      const saved = [...table.querySelectorAll(FIT)].map((el) => [el, el.getAttribute('style')]);
+      for (const [el] of saved) {
+        el.style.removeProperty('overflow-wrap');
+        el.style.removeProperty('font-size');
+      }
+      for (const [el] of saved) {
+        if (half && el.classList.contains('katex')) {
+          el.style.fontSize = (parseFloat(getComputedStyle(el).fontSize) / parseFloat(getComputedStyle(el.parentElement).fontSize)) / 2 + 'em';
+        }
+      }
+      const result = f();
+      for (const [el, style] of saved) el.setAttribute('style', style);
+      return result;
+    };
+    const after = (marker, el) => marker.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING;
+    html.style.width = '${column}px';
+    [...document.querySelectorAll('table')].forEach((table, i) => {
+      const group = after(document.getElementById('series'), table) ? 'series' : after(document.getElementById('fits'), table) ? 'fits' : 'overflowing';
+      const name = \`\${group} table \${i} (\${table.rows[0].cells[0].textContent.trim().slice(0, 12)})\`;
+      const fitted = table.querySelector(FIT) !== null;
+      const wouldOverflow = unfitted(table, () => overflows(table));
+      if (overflows(table)) out.problems.push(\`\${name} runs past its box\`);
+      for (const cell of table.querySelectorAll('td, th')) {
+        if (cell.closest('table') !== table) continue;
+        // A formula's boxes reach past its text, so it's measured by where its text reaches.
+        const formulas = cell.querySelectorAll('.katex-html');
+        if (!formulas.length && cell.scrollWidth > cell.clientWidth + 1) out.problems.push(\`\${name}: a cell's content runs past it\`);
+        const s = getComputedStyle(cell);
+        const inside = cell.getBoundingClientRect().right - parseFloat(s.borderRightWidth) - parseFloat(s.paddingRight) + 0.5;
+        for (const formula of formulas) {
+          const bases = formula.querySelectorAll(':scope > .base');
+          if (!bases.length) continue;
+          const range = document.createRange();
+          range.setStartBefore(bases[0]);
+          range.setEndAfter(bases[bases.length - 1]);
+          if (range.getBoundingClientRect().right > inside) out.problems.push(\`\${name}: a formula runs past its cell by \${(range.getBoundingClientRect().right - inside).toFixed(1)}px\`);
+        }
+      }
+      // Only a table that runs past its box is fitted, and it always is.
+      if (fitted !== wouldOverflow) out.problems.push(\`\${name}: \${fitted ? 'fitted' : 'not fitted'}, but \${wouldOverflow ? 'runs' : "doesn't run"} past its box unfitted\`);
+      if (group === 'fits' && wouldOverflow) out.problems.push(\`\${name} is meant to fit\`);
+      if (table.getAttribute('style') !== null) out.problems.push(\`\${name} has a style of its own\`);
+      if (group === 'series') out.series.push(fitted);
+      // Short values and dates stay whole beside long ones.
+      if (table.rows[0].cells[0].textContent.trim() === 'Id') {
+        for (const row of table.rows) for (const cell of [...row.cells].slice(0, 3)) if (cell.matches(FIT)) out.problems.push(\`\${name}: "\${cell.textContent}" may break\`);
+      }
+      // Its formulas are as large as fits: no smaller than full size if the table fits at that size.
+      const reach = () => {
+        const parent = table.parentElement;
+        const s = getComputedStyle(parent);
+        const edge = parent.getBoundingClientRect().right - parseFloat(s.borderRightWidth) - parseFloat(s.paddingRight);
+        return Math.max(table.getBoundingClientRect().right, ...[...table.rows].map((row) => row.getBoundingClientRect().right)) - edge;
+      };
+      const shrunk = [...table.querySelectorAll('.katex')].filter((formula) => formula.matches(FIT));
+      if (shrunk.length) {
+        const sizes = shrunk.map((formula) => formula.style.fontSize);
+        for (const formula of shrunk) formula.style.removeProperty('font-size');
+        if (reach() <= 0) out.problems.push(\`\${name}: its formulas shrink, though it fits with them at full size\`);
+        shrunk.forEach((formula, i) => (formula.style.fontSize = sizes[i]));
+      }
+      // A formula in a cell shrinks to half size before any word breaks.
+      const formulas = [...table.querySelectorAll('.katex')].filter((formula) => formula.matches(FIT));
+      if (formulas.length && table.querySelector(\`:is(td, th)\${FIT}\`) && !unfitted(table, () => overflows(table), true)) {
+        out.problems.push(\`\${name}: words break, though it fits with its formulas at half size\`);
+      }
+      out.shrunk = (out.shrunk ?? 0) + formulas.length;
+    });
+    out.fitted = [...document.querySelectorAll(FIT)].map((el) => el.outerHTML.slice(0, 200));
+    // Chrome keeps an empty style attribute after a script writes the style, unless it is set first.
+    html.setAttribute('style', '');
+    html.removeAttribute('style');
+    if (out.hasFit === 'function') fitTables();
+    out.rerun = JSON.stringify([...document.querySelectorAll(FIT)].map((el) => el.outerHTML.slice(0, 200))) === JSON.stringify(out.fitted) ? 'same' : 'changed';
+    out.rerunHtmlStyle = html.getAttribute('style');
+    delete out.fitted;
+    return out;
+  };
+</script></body>`;
+
+const fitTablesDoc = () =>
+  `${readFileSync(join(FIXTURES, 'overflowing-tables.md'), 'utf8')}\n<div id="fits"></div>\n\n${readFileSync(join(FIXTURES, 'wide-tables.md'), 'utf8')}\n<div id="series"></div>\n\n${WORD_SERIES}`;
+
+const probeFitTables = (dir, name, column, ...args) => {
+  const r = run('--html', '-o', join(dir, `${name}.pdf`), ...args, join(dir, 't.md'));
+  assert.equal(r.status, 0, r.stderr);
+  writeFileSync(join(dir, `${name}.html`), readFileSync(join(dir, `${name}.html`), 'utf8').replace('</body>', fitTablesProbe(column)));
+  const out = probeInChrome(join(dir, `${name}.html`), dir, { afterLoad: true });
+  assert.deepEqual(out.problems, [], `${name}: ${out.problems.length} problems, such as ${JSON.stringify(out.problems.slice(0, 4))}`);
+  assert.equal(out.hasFit, 'function', `${name}: the page runs fitTables`);
+  assert.equal(out.htmlStyle, null, `${name}: the page's width is put back`);
+  assert.equal(out.rerun, 'same', `${name}: running fitTables again changes nothing`);
+  assert.equal(out.rerunHtmlStyle, null, name);
+  assert.ok(out.series.includes(true) && out.series.includes(false), `${name}: some of the series fit and some don't`);
+  return out;
+};
+
+test('a table too wide for the printed page breaks its long words and fits, in every style, at Letter and A4; one that fits is left alone (#116)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 't.md'), fitTablesDoc());
+    for (const style of STYLE_NAMES) {
+      const [letter, a4] = ['Letter', 'A4'].map((size) =>
+        probeFitTables(dir, `${style}-${size}`, printedColumn(size, pageMargins[style]), '-s', style, '-p', size));
+      // Fitted at the printed page's width, which differs between the two.
+      assert.notDeepEqual(letter.series, a4.series, `${style}: the same tables fit at Letter and A4`);
+      assert.ok(letter.shrunk > 0 && a4.shrunk > 0, `${style}: a formula in a cell shrinks`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a table is fitted to the page margins a --css file sets (#116)", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    writeFileSync(join(dir, 't.md'), fitTablesDoc());
+    writeFileSync(join(dir, 'narrow.css'), '@page { margin: 1in 1.5in; }\n');
+    const plain = probeFitTables(dir, 'plain', printedColumn('Letter', pageMargins.github), '-s', 'github', '-p', 'Letter');
+    const narrow = probeFitTables(dir, 'narrow', printedColumn('Letter', '1in 1.5in'), '-s', 'github', '-p', 'Letter', '--css', join(dir, 'narrow.css'));
+    assert.notDeepEqual(plain.series, narrow.series);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the CLI adds the table-fitting script only to a document with a table, after the formula one (#116)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    for (const [name, markdown, fits] of [
+      ['markdown', '| a |\n|---|\n| b |\n', true],
+      ['raw', '<table><tr><td>a</td></tr></table>\n', true],
+      ['none', '# No table\n\nText.\n', false],
+      ['code', '```html\n<table><tr><td>a</td></tr></table>\n```\n', false],
+    ]) {
+      writeFileSync(join(dir, `${name}.md`), markdown);
+      const r = run('--html', join(dir, `${name}.md`));
+      assert.equal(r.status, 0, r.stderr);
+      (fits ? assert.match : assert.doesNotMatch)(readFileSync(join(dir, `${name}.html`), 'utf8'), /function fitTables/, name);
+    }
+    writeFileSync(join(dir, 'both.md'), '$$x$$\n\n| a |\n|---|\n| b |\n');
+    assert.equal(run('--html', join(dir, 'both.md')).status, 0);
+    assert.match(readFileSync(join(dir, 'both.html'), 'utf8'), /fitFormulas\(\); fitTables\(\);/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 const render = (markdown) =>
   createRenderer({ hljs: { getLanguage: () => undefined } }).render(markdown).replace(/<svg[^]*?<\/svg>/g, '<svg/>');
 
