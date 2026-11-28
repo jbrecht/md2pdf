@@ -957,10 +957,34 @@ test('the github style defines every variable its stylesheets use (#101)', () =>
   const defined = new Set([...css.matchAll(/[{;\s](--[\w-]+)\s*:/g)].map((m) => m[1]));
   const used = new Set([...css.matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]));
   // An undefined variable makes its whole declaration invalid. These are left undefined, as md2pdf has
-  // always printed them: <kbd> has no border (defining it changes the PDFs; #112), and .pl-ii is never emitted.
-  const known = ['--borderColor-muted', '--fgColor-danger', '--bgColor-danger-muted'];
+  // always printed them: .pl-ii is never emitted.
+  const known = ['--fgColor-danger', '--bgColor-danger-muted'];
   assert.deepEqual([...used].filter((v) => !defined.has(v) && !known.includes(v)), []);
   assert.deepEqual(known.filter((v) => defined.has(v)), [], 'now defined: take it off the list');
+});
+
+// A key sits in its line with vertical-align: middle, so it can add a fraction of a pixel; its 1px border
+// must not push that to a visible step between lines. 10.5pt comes closest.
+test('a github <kbd> key makes its line less than a pixel taller, at any text size (#112)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'md2pdf-test-'));
+  try {
+    const sizes = ['6pt', '7pt', '8pt', '10.5pt', '11pt', '15pt', '20pt'];
+    const articles = sizes.map((size) => `<article class="markdown-body" style="--md2pdf-font-size: ${size}">
+<p>A line of plain text.</p><p>Press <kbd>Tab</kbd> or <kbd>Shift</kbd> here.</p></article>`).join('\n');
+    writeFileSync(join(dir, 'keys.html'), `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><style>${screenCss('github')}</style></head>
+<body>
+${articles}
+<script>
+  window.probeOut = [...document.querySelectorAll('article')].map((a) => [...a.querySelectorAll('p')].map((p) => p.getBoundingClientRect().height));
+</script>
+</body></html>`);
+    const heights = probeInChrome(join(dir, 'keys.html'), dir);
+    const taller = sizes.flatMap((size, i) => heights[i][1] >= heights[i][0] + 1 ? [`${size}: ${heights[i][0]} → ${heights[i][1]}`] : []);
+    assert.deepEqual(taller, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('--output writes to the given path', () => {
