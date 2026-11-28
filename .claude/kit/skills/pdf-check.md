@@ -2,7 +2,7 @@
 
 md2pdf's PDFs come from the CLI, `node bin/md2pdf.js <file.md> -o <out.pdf> -s <style> [-p A4]`, which prints with headless Chrome's `--print-to-pdf`. It needs Google Chrome (or Chromium, Edge, Brave or Chrome Canary, whichever it finds first, or `CHROME_PATH`), no server and no port.
 
-`test/print-all.sh OUT_DIR [CHECKOUT]` prints the whole set: every style `--list-styles` names × `test/fixtures/*.md` and `README.md`, at Letter and at A4, as `OUT_DIR/<style>-<input>-<size>.pdf`. With eleven styles that's 66 PDFs in about 55 seconds. CHECKOUT is the checkout whose CLI and styles print; the inputs always come from the checkout the script is in, so both sides print the same Markdown. It ignores your default style, refuses an OUT_DIR that isn't empty (a stale PDF would be compared), and exits 1 if any print fails.
+`test/print-all.sh OUT_DIR [CHECKOUT]` prints the whole set: every style `--list-styles` names × `test/fixtures/*.md` and `README.md`, at Letter and at A4, as `OUT_DIR/<style>-<input>-<size>.pdf`. With eleven styles that's 110 PDFs in about 75 seconds. CHECKOUT is the checkout whose CLI and styles print; the inputs always come from the checkout the script is in, so both sides print the same Markdown. It ignores your default style, refuses an OUT_DIR that isn't empty (a stale PDF would be compared), and exits 1 if any print fails.
 
 `$SCRATCH` below is your session's scratchpad. Shell variables don't carry over between Bash calls, so write its absolute path in. Run from the branch's checkout:
 
